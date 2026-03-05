@@ -19,6 +19,7 @@ from py_clob_client_v2.clob_types import (
     AssetType,
     BalanceAllowanceParams,
     BuilderConfig,
+    BuilderTradeParams,
     OrderArgsV2,
     OrderType,
     PartialCreateOrderOptions,
@@ -609,17 +610,14 @@ def main():
     )
 
     # STEP 7 — Query builder trades
-    if BUILDER_SERVICE_URL:
-        log("STEP 7", "Fetching builder trades")
-        try:
-            with httpx.Client() as client:
-                res = client.get(
-                    f"{BUILDER_SERVICE_URL}/builder/trades",
-                    params={"builderCode": builder_code},
-                )
-                log("STEP 7", f"GET /builder/trades -> {res.status_code}", res.json())
-        except Exception as e:
-            log("STEP 7", f"Builder trades fetch failed: {e}")
+    log("STEP 7", "Fetching builder trades")
+    try:
+        result = user_a_client.get_builder_trades(
+            BuilderTradeParams(builder_code=builder_code)
+        )
+        log("STEP 7", f"Builder trades ({result['count']} total)", result)
+    except Exception as e:
+        log("STEP 7", f"Builder trades fetch failed: {e}")
 
 
 if __name__ == "__main__":
