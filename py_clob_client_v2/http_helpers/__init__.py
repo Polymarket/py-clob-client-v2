@@ -9,12 +9,6 @@ from .helpers import (
     put,
     request,
     build_query_params,
-    add_query_trade_params,
-    add_query_open_orders_params,
-    drop_notifications_query_params,
-    add_balance_allowance_params_to_url,
-    add_order_scoring_params_to_url,
-    add_orders_scoring_params_to_url,
     parse_orders_scoring_params,
     parse_drop_notification_params,
 )

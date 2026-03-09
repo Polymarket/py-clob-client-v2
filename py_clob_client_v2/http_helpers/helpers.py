@@ -4,12 +4,8 @@ import time
 import httpx
 
 from py_clob_client_v2.clob_types import (
-    BalanceAllowanceParams,
     DropNotificationParams,
-    OpenOrderParams,
-    OrderScoringParams,
     OrdersScoringParams,
-    TradeParams,
 )
 from ..exceptions import PolyApiException
 
@@ -110,103 +106,6 @@ def build_query_params(url: str, param: str, val) -> str:
     if last == "?":
         return "{}{}={}".format(url, param, val)
     return "{}&{}={}".format(url, param, val)
-
-def add_query_trade_params(
-    base_url: str, params: TradeParams = None, next_cursor: str = "MA=="
-) -> str:
-    url = base_url
-    has_query = bool(next_cursor) or (
-        bool(params)
-        and any(
-            [
-                params.market,
-                params.asset_id,
-                params.after,
-                params.before,
-                params.maker_address,
-                params.id,
-            ]
-        )
-    )
-    if has_query:
-        url = url + "?"
-    if params:
-        if params.market:
-            url = build_query_params(url, "market", params.market)
-        if params.asset_id:
-            url = build_query_params(url, "asset_id", params.asset_id)
-        if params.after:
-            url = build_query_params(url, "after", params.after)
-        if params.before:
-            url = build_query_params(url, "before", params.before)
-        if params.maker_address:
-            url = build_query_params(url, "maker_address", params.maker_address)
-        if params.id:
-            url = build_query_params(url, "id", params.id)
-    if next_cursor:
-        url = build_query_params(url, "next_cursor", next_cursor)
-    return url
-
-def add_query_open_orders_params(
-    base_url: str, params: OpenOrderParams = None, next_cursor: str = "MA=="
-) -> str:
-    url = base_url
-    has_query = bool(next_cursor) or (
-        bool(params) and any([params.market, params.asset_id, params.id])
-    )
-    if has_query:
-        url = url + "?"
-    if params:
-        if params.market:
-            url = build_query_params(url, "market", params.market)
-        if params.asset_id:
-            url = build_query_params(url, "asset_id", params.asset_id)
-        if params.id:
-            url = build_query_params(url, "id", params.id)
-    if next_cursor:
-        url = build_query_params(url, "next_cursor", next_cursor)
-    return url
-
-def drop_notifications_query_params(
-    base_url: str, params: DropNotificationParams = None
-) -> str:
-    url = base_url
-    if params and params.ids:
-        url = url + "?"
-        url = build_query_params(url, "ids", ",".join(params.ids))
-    return url
-
-def add_balance_allowance_params_to_url(
-    base_url: str, params: BalanceAllowanceParams = None
-) -> str:
-    url = base_url
-    if params:
-        url = url + "?"
-        if params.asset_type:
-            url = build_query_params(url, "asset_type", str(params.asset_type))
-        if params.token_id:
-            url = build_query_params(url, "token_id", params.token_id)
-        if params.signature_type is not None:
-            url = build_query_params(url, "signature_type", params.signature_type)
-    return url
-
-def add_order_scoring_params_to_url(
-    base_url: str, params: OrderScoringParams = None
-) -> str:
-    url = base_url
-    if params and params.orderId:
-        url = url + "?"
-        url = build_query_params(url, "order_id", params.orderId)
-    return url
-
-def add_orders_scoring_params_to_url(
-    base_url: str, params: OrdersScoringParams = None
-) -> str:
-    url = base_url
-    if params and params.orderIds:
-        url = url + "?"
-        url = build_query_params(url, "order_ids", ",".join(params.orderIds))
-    return url
 
 def parse_orders_scoring_params(params: OrdersScoringParams = None) -> dict:
     """Returns a query-params dict for the orders-scoring endpoint."""
