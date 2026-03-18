@@ -822,11 +822,10 @@ class ClobClient:
         for arg in args:
             order = arg.order
             order_type = arg.orderType
-            order_defer_exec = arg.deferExec if arg.deferExec else defer_exec
             payload = (
-                order_to_json_v2(order, owner, order_type, order_defer_exec)
+                order_to_json_v2(order, owner, order_type, defer_exec)
                 if _is_v2_order(order)
-                else order_to_json_v1(order, owner, order_type, order_defer_exec)
+                else order_to_json_v1(order, owner, order_type, defer_exec)
             )
             orders_payload.append(payload)
 
