@@ -17,6 +17,7 @@ def build_hmac_signature(
         # to generate the same hmac message as go and typescript
         message += str(body).replace("'", '"')
 
+    # nosec: SHA256 is used here for API request signing (HMAC-SHA256), not password hashing
     h = hmac.new(base64_secret, bytes(message, "utf-8"), hashlib.sha256)
 
     # ensure base64 encoded

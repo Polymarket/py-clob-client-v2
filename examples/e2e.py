@@ -355,12 +355,12 @@ def init_clob_client(
     try:
         creds = auth_client.derive_api_key()
         if creds and creds.api_key:
-            log(label, f"Derived API key: {creds.api_key}")
+            log(label, f"Derived API key: {creds.api_key[:8]}...")
         else:
             raise ValueError("empty key")
     except Exception:
         creds = auth_client.create_api_key()
-        log(label, f"Created API key: {creds.api_key}")
+        log(label, f"Created API key: {creds.api_key[:8]}...")
         _any_key_freshly_created = True
 
     builder_cfg = (
@@ -486,7 +486,8 @@ def main():
         key_list = keys if isinstance(keys, list) else []
         if not key_list:
             bak = builder_auth_client.create_builder_api_key()
-            log("STEP 2", "Builder API key created", bak)
+            redacted = {k: (v[:8] + "..." if k in ("api_secret", "api_passphrase") and isinstance(v, str) else v) for k, v in (bak.items() if isinstance(bak, dict) else {})}
+            log("STEP 2", "Builder API key created", redacted)
     except Exception as e:
         log("STEP 2", f"Builder API key check/create: {e}")
 

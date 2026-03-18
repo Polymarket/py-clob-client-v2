@@ -56,7 +56,7 @@ class OrderBuilder:
 
         # Address which holds funds. Defaults to the signer address.
         # Used for Polymarket proxy wallets and other smart contract wallets.
-        self.funder = funder if funder is not None else self.signer.address()
+        self.funder = funder if funder is not None else (self.signer.address() if self.signer else None)
 
     def get_order_amounts(
         self, side: str, size: float, price: float, round_config: RoundConfig

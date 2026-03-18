@@ -66,6 +66,7 @@ def request(endpoint: str, method: str, headers=None, data=None, params=None):
             )
 
         if resp.status_code != 200:
+            # resp.text is the server response body (no credentials are logged here)
             logger.error(
                 "[py_clob_client_v2] request error status=%s url=%s body=%s",
                 resp.status_code,

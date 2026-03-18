@@ -83,6 +83,7 @@ class RfqClient:
             self._parent.signer,
             self._parent.creds,
             request_args,
+            timestamp=self._parent._get_timestamp(),
         )
 
     def _build_url(self, endpoint: str) -> str:
