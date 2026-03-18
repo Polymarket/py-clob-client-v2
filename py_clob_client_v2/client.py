@@ -503,7 +503,9 @@ class ClobClient:
         headers = self._l2_headers("GET", ORDERS)
         results = []
         cursor = next_cursor or INITIAL_CURSOR
-        while cursor != END_CURSOR and (cursor == INITIAL_CURSOR or not only_first_page):
+        first = True
+        while cursor != END_CURSOR and (first or not only_first_page):
+            first = False
             p = {}
             if params:
                 if params.market:
@@ -527,7 +529,9 @@ class ClobClient:
         headers = self._l2_headers("GET", TRADES)
         results = []
         cursor = next_cursor or INITIAL_CURSOR
-        while cursor != END_CURSOR and (cursor == INITIAL_CURSOR or not only_first_page):
+        first = True
+        while cursor != END_CURSOR and (first or not only_first_page):
+            first = False
             p = {}
             if params:
                 if params.market:

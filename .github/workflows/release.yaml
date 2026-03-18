@@ -36,7 +36,7 @@ jobs:
       - name: Build sdist and wheel
         env:
           PACKAGE_VERSION: ${{ github.ref_name }}
-        run: python -m build
+        run: python -m build --no-isolation
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
