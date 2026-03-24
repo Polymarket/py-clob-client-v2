@@ -6,7 +6,6 @@ from .clob_types import (
     ApiCreds,
     BalanceAllowanceParams,
     BookParams,
-    BuilderCode,
     BuilderConfig,
     BuilderFeeRate,
     BuilderTradeParams,
@@ -343,7 +342,8 @@ class ClobClient:
 
         if token_id in self.__token_condition_map:
             self.get_clob_market_info(self.__token_condition_map[token_id])
-            return self.__fee_infos[token_id].rate
+            rate = self.__fee_infos[token_id].rate
+            return rate if rate is not None else 0.0
 
         result = self._get(
             f"{self.host}{GET_FEE_RATE}", params={"token_id": token_id}
@@ -358,7 +358,8 @@ class ClobClient:
         if fi is not None and fi.exponent is not None:
             return fi.exponent
         self.__ensure_market_info_cached(token_id)
-        return self.__fee_infos[token_id].exponent
+        exponent = self.__fee_infos.get(token_id, FeeInfo()).exponent
+        return exponent if exponent is not None else 0.0
 
     def get_midpoint(self, token_id: str):
         return self._get(f"{self.host}{GET_MIDPOINT}", params={"token_id": token_id})
