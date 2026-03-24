@@ -157,6 +157,7 @@ class ClobClient:
         self.__tick_sizes: dict = {}
         self.__neg_risk: dict = {}
         self.__fee_infos: dict = {}
+        self.__market_info_fetched: set = set()
         self.__builder_fee_rates: dict = {}
         self.__token_condition_map: dict = {}
         self.__cached_version: Optional[int] = None
@@ -292,6 +293,7 @@ class ClobClient:
             if fd.get("e") is not None:
                 fi.exponent = fd["e"]
             self.__fee_infos[token_id] = fi
+            self.__market_info_fetched.add(token_id)
 
         return result
 
@@ -335,8 +337,9 @@ class ClobClient:
         return self.__neg_risk[token_id]
 
     def get_fee_rate_bps(self, token_id: str) -> float:
-        if token_id in self.__fee_infos:
-            return self.__fee_infos[token_id].rate
+        fi = self.__fee_infos.get(token_id)
+        if fi is not None and fi.rate is not None:
+            return fi.rate
 
         if token_id in self.__token_condition_map:
             self.get_clob_market_info(self.__token_condition_map[token_id])
@@ -345,14 +348,15 @@ class ClobClient:
         result = self._get(
             f"{self.host}{GET_FEE_RATE}", params={"token_id": token_id}
         )
-        fi = self.__fee_infos.get(token_id, FeeInfo())
+        fi = self.__fee_infos.get(token_id) or FeeInfo()
         fi.rate = result["base_fee"]
         self.__fee_infos[token_id] = fi
         return fi.rate
 
     def get_fee_exponent(self, token_id: str) -> float:
-        if token_id in self.__fee_infos:
-            return self.__fee_infos[token_id].exponent
+        fi = self.__fee_infos.get(token_id)
+        if fi is not None and fi.exponent is not None:
+            return fi.exponent
         self.__ensure_market_info_cached(token_id)
         return self.__fee_infos[token_id].exponent
 
@@ -723,13 +727,13 @@ class ClobClient:
                 if builder_code and builder_code != BYTES32_ZERO and builder_code in self.__builder_fee_rates
                 else 0
             )
-            fi = self.__fee_infos.get(token_id, FeeInfo())
+            fi = self.__fee_infos.get(token_id) or FeeInfo()
             order_args.amount = adjust_market_buy_amount(
                 order_args.amount,
                 order_args.user_usdc_balance,
                 order_args.price,
-                fi.rate,
-                fi.exponent,
+                fi.rate or 0.0,
+                fi.exponent or 0.0,
                 builder_taker_fee_rate,
             )
 
@@ -980,7 +984,7 @@ class ClobClient:
             self.__builder_fee_rates[builder_code] = BuilderFeeRate(maker=0, taker=0)
 
     def __ensure_market_info_cached(self, token_id: str):
-        if token_id in self.__fee_infos:
+        if token_id in self.__market_info_fetched:
             return
 
         if token_id not in self.__token_condition_map:
