@@ -59,9 +59,11 @@ class OrderBuilder:
         self.funder = funder if funder is not None else (self.signer.address() if self.signer else None)
 
     def get_order_amounts(
-        self, side: str, size: float, price: float, round_config: RoundConfig
+        self, side, size: float, price: float, round_config: RoundConfig
     ):
         """Returns (Side, maker_amount, taker_amount) for a limit order."""
+        if isinstance(side, Side):
+            side = BUY if side == Side.BUY else SELL
         raw_price = round_normal(price, round_config.price)
 
         if side == BUY:
@@ -88,9 +90,11 @@ class OrderBuilder:
             raise ValueError(f"order_args.side must be '{BUY}' or '{SELL}'")
 
     def get_market_order_amounts(
-        self, side: str, amount: float, price: float, round_config: RoundConfig
+        self, side, amount: float, price: float, round_config: RoundConfig
     ):
         """Returns (Side, maker_amount, taker_amount) for a market order."""
+        if isinstance(side, Side):
+            side = BUY if side == Side.BUY else SELL
         # V2 change: market orders use round_down for price (v1 used round_normal)
         raw_price = round_down(price, round_config.price)
 
