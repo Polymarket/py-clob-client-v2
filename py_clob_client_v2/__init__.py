@@ -1,5 +1,7 @@
 from .client import ClobClient
+from .order_utils import SignatureTypeV2, Side
 from .clob_types import (
+    PriceHistoryInterval,
     ApiCreds,
     # V1/V2 order input types
     OrderArgsV1,
@@ -13,6 +15,9 @@ from .clob_types import (
     BookParams,
     TradeParams,
     OpenOrderParams,
+    DropNotificationParams,
+    OrderScoringParams,
+    OrdersScoringParams,
     BalanceAllowanceParams,
     AssetType,
     PartialCreateOrderOptions,
@@ -41,6 +46,9 @@ from .clob_types import (
 __all__ = [
     # Main client
     "ClobClient",
+    "SignatureTypeV2",
+    "Side",
+    "PriceHistoryInterval",
     # Order input types
     "OrderArgsV1",
     "OrderArgsV2",
@@ -55,6 +63,9 @@ __all__ = [
     "BookParams",
     "TradeParams",
     "OpenOrderParams",
+    "DropNotificationParams",
+    "OrderScoringParams",
+    "OrdersScoringParams",
     "BalanceAllowanceParams",
     "AssetType",
     "PartialCreateOrderOptions",

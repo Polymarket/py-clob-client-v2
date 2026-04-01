@@ -33,6 +33,11 @@ class BookParams:
     token_id: str
     side: str = ""
 
+    def __post_init__(self):
+        # Accept Side IntEnum (BUY=0, SELL=1) as well as plain strings
+        if isinstance(self.side, int):
+            self.side = "BUY" if self.side == 0 else "SELL"
+
 
 @dataclass
 class OrderArgsV1:
@@ -419,12 +424,21 @@ class BuilderApiKeyResponse:
     revoked_at: Optional[str] = None
 
 
+class PriceHistoryInterval:
+    MAX = "max"
+    ONE_WEEK = "1w"
+    ONE_DAY = "1d"
+    SIX_HOURS = "6h"
+    ONE_HOUR = "1h"
+
+
 @dataclass
 class PricesHistoryParams:
     market: str = None
     start_ts: int = None
     end_ts: int = None
     fidelity: int = None
+    interval: str = None
 
 
 @dataclass
