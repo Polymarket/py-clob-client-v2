@@ -43,6 +43,7 @@ from .constants import (
 )
 from .endpoints import (
     ARE_ORDERS_SCORING,
+    OK,
     CANCEL,
     CANCEL_ALL,
     CANCEL_MARKET_ORDERS,
@@ -65,7 +66,6 @@ from .endpoints import (
     GET_LIQUIDITY_REWARD_PERCENTAGES,
     GET_MARKET,
     GET_MARKET_BY_TOKEN,
-    GET_MARKET_TRADES_EVENTS,
     GET_MARKETS,
     GET_MIDPOINT,
     GET_MIDPOINTS,
@@ -232,7 +232,7 @@ class ClobClient:
         )
 
     def get_ok(self):
-        return self._get(f"{self.host}/")
+        return self._get(f"{self.host}{OK}")
 
     def get_version(self) -> int:
         try:
@@ -383,6 +383,8 @@ class ClobClient:
         return self._post(f"{self.host}{GET_LAST_TRADES_PRICES}", data=params)
 
     def get_prices_history(self, params: PricesHistoryParams):
+        if params.interval is None and (params.start_ts is None or params.end_ts is None):
+            raise ValueError("get_prices_history requires either interval or both start_ts and end_ts")
         p = {}
         if params.market:
             p["market"] = params.market
@@ -395,9 +397,6 @@ class ClobClient:
         if params.interval is not None:
             p["interval"] = params.interval
         return self._get(f"{self.host}{GET_PRICES_HISTORY}", params=p)
-
-    def get_market_trades_events(self, condition_id: str):
-        return self._get(f"{self.host}{GET_MARKET_TRADES_EVENTS}{condition_id}")
 
     def calculate_market_price(
         self,

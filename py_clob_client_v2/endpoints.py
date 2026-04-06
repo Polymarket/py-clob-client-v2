@@ -1,3 +1,5 @@
+OK = "/ok"
+
 TIME = "/time"
 VERSION = "/version"
 
@@ -63,9 +65,6 @@ DROP_NOTIFICATIONS = "/notifications"
 # Balance & Allowance
 GET_BALANCE_ALLOWANCE = "/balance-allowance"
 UPDATE_BALANCE_ALLOWANCE = "/balance-allowance/update"
-
-# Live activity
-GET_MARKET_TRADES_EVENTS = "/live-activity/events/"
 
 # Rewards
 GET_EARNINGS_FOR_USER_FOR_DAY = "/rewards/user"
