@@ -10,7 +10,7 @@ Python client for the Polymarket CLOB (v2)
 import os
 from py_clob_client_v2 import ApiCreds, ClobClient, OrderArgs, OrderType, PartialCreateOrderOptions, Side
 
-host = "https://clob-v2.polymarket.com"
+host = "<polymarket-clob-host>"
 chain_id = 137  # or 80002 for Amoy testnet
 
 # Step 1: obtain API credentials using your wallet (L1 auth)
