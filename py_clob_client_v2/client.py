@@ -89,6 +89,7 @@ from .endpoints import (
     GET_TOTAL_EARNINGS_FOR_USER_FOR_DAY,
     IS_ORDER_SCORING,
     ORDERS,
+    PRE_MIGRATION_ORDERS,
     POST_ORDER,
     POST_ORDERS,
     TIME,
@@ -509,6 +510,23 @@ class ClobClient:
                     p["id"] = params.id
             p["next_cursor"] = cursor
             response = self._get(f"{self.host}{ORDERS}", headers=headers, params=p)
+            cursor = response["next_cursor"]
+            results.extend(response["data"])
+        return results
+
+    def get_pre_migration_orders(
+        self,
+        only_first_page: bool = False,
+        next_cursor: str = None,
+    ) -> list:
+        headers = self._l2_headers("GET", PRE_MIGRATION_ORDERS)
+        results = []
+        cursor = next_cursor or INITIAL_CURSOR
+        first = True
+        while cursor != END_CURSOR and (first or not only_first_page):
+            first = False
+            p = {"next_cursor": cursor}
+            response = self._get(f"{self.host}{PRE_MIGRATION_ORDERS}", headers=headers, params=p)
             cursor = response["next_cursor"]
             results.extend(response["data"])
         return results
