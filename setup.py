@@ -20,8 +20,6 @@ setuptools.setup(
         "eth-utils>=4.1.1",
         "poly_eip712_structs>=0.0.1",
         "py-order-utils>=0.3.2",
-        "python-dotenv",
-        "py-builder-signing-sdk>=0.0.2",
         "httpx[http2]>=0.27.0",
     ],
     project_urls={
@@ -32,6 +30,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages(exclude=["tests*"]),
     python_requires=">=3.9.10",
 )
