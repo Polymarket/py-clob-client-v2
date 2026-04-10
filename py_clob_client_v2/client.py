@@ -821,6 +821,8 @@ class ClobClient:
 
     def post_orders(self, args: list, post_only: bool = False, defer_exec: bool = False):
         self.assert_level_2_auth()
+        if post_only and any(arg.orderType in (OrderType.FOK, OrderType.FAK) for arg in args):
+            raise ValueError("post_only is not supported for FOK/FAK orders")
 
         owner = self.creds.api_key or ""
         orders_payload = []
