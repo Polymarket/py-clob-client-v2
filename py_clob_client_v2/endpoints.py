@@ -10,9 +10,18 @@ DELETE_API_KEY = "/auth/api-key"
 DERIVE_API_KEY = "/auth/derive-api-key"
 CLOSED_ONLY = "/auth/ban-status/closed-only"
 
+# Readonly API Key endpoints
+CREATE_READONLY_API_KEY = "/auth/readonly-api-key"
+GET_READONLY_API_KEYS = "/auth/readonly-api-keys"
+DELETE_READONLY_API_KEY = "/auth/readonly-api-key"
+
 # Builder API Key endpoints
 CREATE_BUILDER_API_KEY = "/auth/builder-api-key"
 GET_BUILDER_API_KEYS = "/auth/builder-api-key"
+REVOKE_BUILDER_API_KEY = "/auth/builder-api-key"
+
+# Live activity
+GET_MARKET_TRADES_EVENTS = "/markets/live-activity/"
 
 # Markets
 GET_SAMPLING_SIMPLIFIED_MARKETS = "/sampling-simplified-markets"

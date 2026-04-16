@@ -51,11 +51,15 @@ from .endpoints import (
     CLOSED_ONLY,
     CREATE_API_KEY,
     CREATE_BUILDER_API_KEY,
+    CREATE_READONLY_API_KEY,
     DELETE_API_KEY,
+    DELETE_READONLY_API_KEY,
     DERIVE_API_KEY,
     GET_API_KEYS,
     GET_BALANCE_ALLOWANCE,
     GET_BUILDER_API_KEYS,
+    GET_MARKET_TRADES_EVENTS,
+    GET_READONLY_API_KEYS,
     GET_BUILDER_FEE_RATE,
     GET_BUILDER_TRADES,
     GET_CLOB_MARKET,
@@ -93,6 +97,7 @@ from .endpoints import (
     POST_HEARTBEAT,
     POST_ORDER,
     POST_ORDERS,
+    REVOKE_BUILDER_API_KEY,
     TIME,
     TRADES,
     UPDATE_BALANCE_ALLOWANCE,
@@ -980,6 +985,31 @@ class ClobClient:
         self.assert_level_2_auth()
         headers = self._l2_headers("GET", GET_BUILDER_API_KEYS)
         return self._get(f"{self.host}{GET_BUILDER_API_KEYS}", headers=headers)
+
+    def revoke_builder_api_key(self):
+        self.assert_level_2_auth()
+        headers = self._l2_headers("DELETE", REVOKE_BUILDER_API_KEY)
+        return self._delete(f"{self.host}{REVOKE_BUILDER_API_KEY}", headers=headers)
+
+    def create_readonly_api_key(self):
+        self.assert_level_2_auth()
+        headers = self._l2_headers("POST", CREATE_READONLY_API_KEY)
+        return self._post(f"{self.host}{CREATE_READONLY_API_KEY}", headers=headers)
+
+    def get_readonly_api_keys(self):
+        self.assert_level_2_auth()
+        headers = self._l2_headers("GET", GET_READONLY_API_KEYS)
+        return self._get(f"{self.host}{GET_READONLY_API_KEYS}", headers=headers)
+
+    def delete_readonly_api_key(self, key: str):
+        self.assert_level_2_auth()
+        body = {"key": key}
+        serialized = json.dumps(body, separators=(",", ":"))
+        headers = self._l2_headers("DELETE", DELETE_READONLY_API_KEY, body=body, serialized_body=serialized)
+        return self._delete(f"{self.host}{DELETE_READONLY_API_KEY}", headers=headers, data=serialized)
+
+    def get_market_trades_events(self, condition_id: str):
+        return self._get(f"{self.host}{GET_MARKET_TRADES_EVENTS}{condition_id}")
 
     def __resolve_tick_size(self, token_id: str, tick_size: TickSize = None) -> TickSize:
         min_tick_size = self.get_tick_size(token_id)
