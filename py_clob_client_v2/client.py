@@ -103,7 +103,7 @@ from .endpoints import (
     UPDATE_BALANCE_ALLOWANCE,
     VERSION,
 )
-from .exceptions import PolyException
+from .exceptions import PolyApiException, PolyException
 from .headers.headers import create_level_1_headers, create_level_2_headers
 from .http_helpers.helpers import (
     delete,
@@ -478,8 +478,13 @@ class ClobClient:
             resp = self.create_api_key(nonce=nonce)
             if resp.api_key:
                 return resp
-        except Exception:
-            pass
+        except PolyApiException as exc:
+            # Only fall through to derive on client errors (e.g. "key already
+            # exists"). 5xx / network errors should propagate so the caller
+            # learns the upstream is unhealthy instead of silently deriving.
+            status = exc.status_code
+            if status is None or not (400 <= status < 500):
+                raise
         return self.derive_api_key(nonce=nonce)
 
     def get_api_keys(self):
