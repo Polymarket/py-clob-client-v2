@@ -155,7 +155,7 @@ class OrderBuilder:
             )
             resolved_fee_rate_bps = (
                 fee_rate_bps if fee_rate_bps is not None
-                else getattr(order_args, "fee_rate_bps", 0)
+                else (getattr(order_args, "fee_rate_bps", None) or 0)
             )
             order_data = OrderDataV1(
                 maker=self.funder,
@@ -236,7 +236,7 @@ class OrderBuilder:
             )
             resolved_fee_rate_bps = (
                 fee_rate_bps if fee_rate_bps is not None
-                else getattr(order_args, "fee_rate_bps", 0)
+                else (getattr(order_args, "fee_rate_bps", None) or 0)
             )
             order_data = OrderDataV1(
                 maker=self.funder,
