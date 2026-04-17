@@ -63,8 +63,16 @@ def adjust_market_buy_amount(
     d_fee_rate = Decimal(str(fee_rate))
     d_fee_exponent = Decimal(str(fee_exponent))
     d_btr = Decimal(str(builder_taker_fee_rate))
-    base = float(d_price * (Decimal("1") - d_price))
-    d_pfr = d_fee_rate * Decimal(str(base ** float(d_fee_exponent)))
+
+    base = d_price * (Decimal("1") - d_price)
+    # Production fee exponents are integer (e.g. 1 or 2). Keep the whole
+    # calculation in Decimal when possible; only fall back to a float pow
+    # for the (unusual) non-integer case.
+    if d_fee_exponent == d_fee_exponent.to_integral_value():
+        base_pow = base ** int(d_fee_exponent)
+    else:
+        base_pow = Decimal(str(float(base) ** float(d_fee_exponent)))
+    d_pfr = d_fee_rate * base_pow
 
     platform_fee = d_amount / d_price * d_pfr
     total_cost = d_amount + platform_fee + d_amount * d_btr
