@@ -1080,10 +1080,16 @@ class ClobClient:
         return ORDER_VERSION_MISMATCH_ERROR in message
 
     def _retry_on_version_update(self, func):
-        version = self.__resolve_version()
-        result = None
-        for _ in range(2):
+        # Retry once iff the first response explicitly reports a version
+        # mismatch. `post_order` already force-updates the cached version
+        # when it detects the mismatch, so the retry just rebuilds the
+        # order against the new version and re-posts.
+        #
+        # Previously the retry decision compared the cached version before
+        # and after `func()`, which also fires if anything else (another
+        # call, another thread) invalidates the cache mid-flight. In that
+        # case a successful order could be silently re-posted.
+        result = func()
+        if self._is_order_version_mismatch(result):
             result = func()
-            if version == self.__resolve_version():
-                break
         return result
