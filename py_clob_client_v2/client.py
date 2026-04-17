@@ -747,7 +747,7 @@ class ClobClient:
 
         builder_code = getattr(order_args, "builder_code", BYTES32_ZERO)
 
-        if (order_args.side == "BUY" or order_args.side == Side.BUY) and order_args.user_usdc_balance:
+        if (order_args.side == "BUY" or order_args.side == Side.BUY) and getattr(order_args, "user_usdc_balance", None):
             self.__ensure_builder_fee_rate_cached(builder_code)
             builder_taker_fee_rate = (
                 self.__builder_fee_rates[builder_code].taker
