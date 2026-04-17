@@ -156,23 +156,6 @@ class TestAdjustBuyAmountForFees(unittest.TestCase):
         self.assertAlmostEqual(adjusted + platform_fee + builder_fee, amount, places=9)
 
 
-class TestProductionFeeRatesV1(unittest.TestCase):
-    def _fee_v1(self, notional: float, bps: int) -> float:
-        return notional * bps / 10000
-
-    def test_sports_fees_v2_300bps(self):
-        self.assertAlmostEqual(self._fee_v1(100, 300), 3.0, delta=1e-6)
-
-    def test_politics_tech_finance_mentions_400bps(self):
-        self.assertAlmostEqual(self._fee_v1(100, 400), 4.0, delta=1e-6)
-
-    def test_culture_weather_general_economics_500bps(self):
-        self.assertAlmostEqual(self._fee_v1(100, 500), 5.0, delta=1e-6)
-
-    def test_crypto_fees_v2_720bps(self):
-        self.assertAlmostEqual(self._fee_v1(100, 720), 7.2, delta=1e-6)
-
-
 class TestProductionFeeRatesV2(unittest.TestCase):
     amount = 100
 
