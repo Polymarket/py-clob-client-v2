@@ -473,17 +473,21 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
+    # Status codes from create_api_key that mean "a key already exists,
+    # derive instead". Conservatively narrow: 409 Conflict is the idiomatic
+    # shape, 400 covers servers that overload it for the same condition.
+    # 401/403/429/5xx/network errors are NOT in this set — they propagate
+    # so the caller can handle auth, rate-limit, or upstream failures
+    # instead of silently receiving a derived key they did not ask for.
+    _CREATE_API_KEY_DERIVE_FALLBACK_STATUSES = frozenset({400, 409})
+
     def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
         try:
             resp = self.create_api_key(nonce=nonce)
             if resp.api_key:
                 return resp
         except PolyApiException as exc:
-            # Only fall through to derive on client errors (e.g. "key already
-            # exists"). 5xx / network errors should propagate so the caller
-            # learns the upstream is unhealthy instead of silently deriving.
-            status = exc.status_code
-            if status is None or not (400 <= status < 500):
+            if exc.status_code not in self._CREATE_API_KEY_DERIVE_FALLBACK_STATUSES:
                 raise
         return self.derive_api_key(nonce=nonce)
 
