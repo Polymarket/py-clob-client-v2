@@ -1,8 +1,8 @@
 import dataclasses
 import time
-from eth_account import Account
 from eth_account.messages import encode_typed_data
 from eth_utils import keccak as _keccak
+from py_order_utils.utils import prepend_zx
 
 
 def _hash_message(msg) -> bytes:
@@ -39,10 +39,10 @@ class ExchangeOrderBuilderV2:
         self.signer = signer
         self.generate_salt = generate_salt
 
-    def build_signed_order(self, order_data: OrderDataV2) -> SignedOrderV2:
+    async def build_signed_order(self, order_data: OrderDataV2) -> SignedOrderV2:
         order = self.build_order(order_data)
         typed_data = self.build_order_typed_data(order)
-        signature = self.build_order_signature(typed_data)
+        signature = await self.build_order_signature(typed_data)
         return SignedOrderV2(**{**dataclasses.asdict(order), "signature": signature})
 
     def build_order(self, order_data: OrderDataV2) -> OrderV2:
@@ -102,10 +102,8 @@ class ExchangeOrderBuilderV2:
             },
         }
 
-    def build_order_signature(self, typed_data: dict) -> str:
-        encoded = encode_typed_data(full_message=typed_data)
-        signed = Account.sign_message(encoded, private_key=self.signer.private_key)
-        return "0x" + signed.signature.hex()
+    async def build_order_signature(self, typed_data: dict) -> str:
+        return prepend_zx(await self.signer.sign(self.build_order_hash(typed_data)))
 
     def build_order_hash(self, typed_data: dict) -> str:
         encoded = encode_typed_data(full_message=typed_data)

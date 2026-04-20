@@ -1,3 +1,4 @@
+import asyncio
 from unittest import TestCase
 
 from py_clob_client_v2.constants import AMOY, ZERO_ADDRESS
@@ -34,6 +35,21 @@ _ORDER_DATA = OrderDataV1(
     signer=signer.address(),
     expiration="0",
     signatureType=SignatureTypeV1.EOA,
+)
+
+
+def run_async(coro):
+    return asyncio.run(coro)
+
+
+async def sign_callback_override(message_hash):
+    return await signer.sign(message_hash)
+
+
+callback_signer = Signer(
+    chain_id=chain_id,
+    address_override=signer.address(),
+    sign_callback_override=sign_callback_override,
 )
 
 class TestExchangeOrderBuilderV1CTF(TestCase):
@@ -139,7 +155,7 @@ class TestExchangeOrderBuilderV1CTF(TestCase):
     def test_build_order_signature_random_salt(self):
         order = self.builder.build_order(_ORDER_DATA)
         typed_data = self.builder.build_order_typed_data(order)
-        sig = self.builder.build_order_signature(typed_data)
+        sig = run_async(self.builder.build_order_signature(typed_data))
         self.assertIsNotNone(sig)
         self.assertNotEqual(sig, "")
 
@@ -147,7 +163,20 @@ class TestExchangeOrderBuilderV1CTF(TestCase):
         self.builder.generate_salt = lambda: FIXED_SALT
         order = self.builder.build_order(_ORDER_DATA)
         typed_data = self.builder.build_order_typed_data(order)
-        sig = self.builder.build_order_signature(typed_data)
+        sig = run_async(self.builder.build_order_signature(typed_data))
+        self.assertEqual(
+            sig,
+            "0x302cd9abd0b5fcaa202a344437ec0b6660da984e24ae9ad915a592a90facf5a51bb8a873cd8d270f070217fea1986531d5eec66f1162a81f66e026db653bf7ce1c",
+        )
+
+    def test_build_order_signature_specific_salt_with_sign_callback_override(self):
+        callback_builder = ExchangeOrderBuilderV1(
+            contract_config.exchange, chain_id, callback_signer
+        )
+        callback_builder.generate_salt = lambda: FIXED_SALT
+        order = callback_builder.build_order(_ORDER_DATA)
+        typed_data = callback_builder.build_order_typed_data(order)
+        sig = run_async(callback_builder.build_order_signature(typed_data))
         self.assertEqual(
             sig,
             "0x302cd9abd0b5fcaa202a344437ec0b6660da984e24ae9ad915a592a90facf5a51bb8a873cd8d270f070217fea1986531d5eec66f1162a81f66e026db653bf7ce1c",
@@ -171,7 +200,7 @@ class TestExchangeOrderBuilderV1CTF(TestCase):
         )
 
     def test_build_signed_order_random_salt(self):
-        signed = self.builder.build_signed_order(_ORDER_DATA)
+        signed = run_async(self.builder.build_signed_order(_ORDER_DATA))
         self.assertIsNotNone(signed)
         self.assertNotEqual(signed.salt, "")
         self.assertEqual(signed.maker, signer.address())
@@ -189,7 +218,7 @@ class TestExchangeOrderBuilderV1CTF(TestCase):
 
     def test_build_signed_order_specific_salt(self):
         self.builder.generate_salt = lambda: FIXED_SALT
-        signed = self.builder.build_signed_order(_ORDER_DATA)
+        signed = run_async(self.builder.build_signed_order(_ORDER_DATA))
         self.assertEqual(signed.salt, FIXED_SALT)
         self.assertEqual(signed.maker, signer.address())
         self.assertEqual(signed.signer, signer.address())
@@ -235,7 +264,7 @@ class TestExchangeOrderBuilderV1NegRisk(TestCase):
         self.builder.generate_salt = lambda: FIXED_SALT
         order = self.builder.build_order(_ORDER_DATA)
         typed_data = self.builder.build_order_typed_data(order)
-        sig = self.builder.build_order_signature(typed_data)
+        sig = run_async(self.builder.build_order_signature(typed_data))
         self.assertEqual(
             sig,
             "0x1b3646ef347e5bd144c65bd3357ba19c12c12abaeedae733cf8579bc51a2752c0454c3bc6b236957e393637982c769b8dc0706c0f5c399983d933850afd1cbcd1c",
@@ -253,7 +282,7 @@ class TestExchangeOrderBuilderV1NegRisk(TestCase):
 
     def test_build_signed_order_specific_salt(self):
         self.builder.generate_salt = lambda: FIXED_SALT
-        signed = self.builder.build_signed_order(_ORDER_DATA)
+        signed = run_async(self.builder.build_signed_order(_ORDER_DATA))
         self.assertEqual(signed.salt, FIXED_SALT)
         self.assertEqual(
             signed.signature,

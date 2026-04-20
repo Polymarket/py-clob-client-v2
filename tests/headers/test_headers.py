@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from unittest import TestCase
 
@@ -30,7 +31,7 @@ creds = ApiCreds(
 class TestHeaders(TestCase):
     def test_create_level_1_headers(self):
         # no nonce
-        headers = create_level_1_headers(signer)
+        headers = asyncio.run(create_level_1_headers(signer))
         self.assertIsNotNone(headers)
         self.assertEqual(headers[POLY_ADDRESS], signer.address())
         self.assertIsNotNone(headers[POLY_SIGNATURE])
@@ -39,7 +40,7 @@ class TestHeaders(TestCase):
         self.assertEqual(headers[POLY_NONCE], "0")
 
         # with nonce
-        headers = create_level_1_headers(signer, nonce=1012)
+        headers = asyncio.run(create_level_1_headers(signer, nonce=1012))
         self.assertIsNotNone(headers)
         self.assertEqual(headers[POLY_ADDRESS], signer.address())
         self.assertIsNotNone(headers[POLY_SIGNATURE])

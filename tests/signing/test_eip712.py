@@ -1,3 +1,4 @@
+import asyncio
 from unittest import TestCase
 
 from py_clob_client_v2.constants import AMOY
@@ -10,10 +11,30 @@ chain_id = AMOY
 signer = Signer(private_key=private_key, chain_id=chain_id)
 
 
+def run_async(coro):
+    return asyncio.run(coro)
+
+
 class TestEIP712(TestCase):
     def test_sign_clob_auth_message(self):
-        signature = sign_clob_auth_message(signer, 10000000, 23)
+        signature = run_async(sign_clob_auth_message(signer, 10000000, 23))
         self.assertIsNotNone(signature)
+        self.assertEqual(
+            signature,
+            "0xf62319a987514da40e57e2f4d7529f7bac38f0355bd88bb5adbb3768d80de6c1682518e0af677d5260366425f4361e7b70c25ae232aff0ab2331e2b164a1aedc1b",
+        )
+
+    def test_sign_clob_auth_message_with_sign_callback_override(self):
+        async def sign_callback_override(message_hash):
+            return await signer.sign(message_hash)
+
+        callback_signer = Signer(
+            chain_id=chain_id,
+            address_override=signer.address(),
+            sign_callback_override=sign_callback_override,
+        )
+
+        signature = run_async(sign_clob_auth_message(callback_signer, 10000000, 23))
         self.assertEqual(
             signature,
             "0xf62319a987514da40e57e2f4d7529f7bac38f0355bd88bb5adbb3768d80de6c1682518e0af677d5260366425f4361e7b70c25ae232aff0ab2331e2b164a1aedc1b",
