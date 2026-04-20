@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional
+from typing import Optional, Callable
 
 from .clob_types import (
     ApiCreds,
@@ -143,6 +143,8 @@ class ClobClient:
         builder_config: BuilderConfig = None,
         use_server_time: bool = False,
         retry_on_error: bool = False,
+        address_override: str = None,
+        sign_callback_override: Optional[Callable] = None,
     ):
         self.host = host.rstrip("/")
         self.chain_id = chain_id
@@ -150,7 +152,15 @@ class ClobClient:
         self.retry_on_error = retry_on_error
         self.builder_config = builder_config
 
-        self.signer = Signer(key, chain_id) if key else None
+        self.signer = None
+        if sign_callback_override is not None:
+            self.signer = Signer(
+                chain_id=chain_id,
+                address_override=address_override,
+                sign_callback_override=sign_callback_override,
+            )
+        elif key:
+            self.signer = Signer(private_key=key, chain_id=chain_id)
         self.creds = creds
         self.mode = self._get_client_mode()
 
@@ -219,9 +229,9 @@ class ClobClient:
             return result.get("time") or result.get("timestamp")
         return int(result)
 
-    def _l1_headers(self, nonce: int = None) -> dict:
+    async def _l1_headers(self, nonce: int = None) -> dict:
         self.assert_level_1_auth()
-        return create_level_1_headers(
+        return await create_level_1_headers(
             self.signer, nonce=nonce, timestamp=self._get_timestamp()
         )
 
@@ -455,8 +465,8 @@ class ClobClient:
             results.extend(response["data"])
         return results
 
-    def create_api_key(self, nonce: int = None) -> ApiCreds:
-        headers = self._l1_headers(nonce=nonce)
+    async def create_api_key(self, nonce: int = None) -> ApiCreds:
+        headers = await self._l1_headers(nonce=nonce)
         resp = self._post(f"{self.host}{CREATE_API_KEY}", headers=headers)
         return ApiCreds(
             api_key=resp["apiKey"],
@@ -464,8 +474,8 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def derive_api_key(self, nonce: int = None) -> ApiCreds:
-        headers = self._l1_headers(nonce=nonce)
+    async def derive_api_key(self, nonce: int = None) -> ApiCreds:
+        headers = await self._l1_headers(nonce=nonce)
         resp = self._get(f"{self.host}{DERIVE_API_KEY}", headers=headers)
         return ApiCreds(
             api_key=resp["apiKey"],
@@ -473,14 +483,17 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
+    async def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
         try:
-            resp = self.create_api_key(nonce=nonce)
+            resp = await self.create_api_key(nonce=nonce)
             if resp.api_key:
                 return resp
         except Exception:
             pass
-        return self.derive_api_key(nonce=nonce)
+        return await self.derive_api_key(nonce=nonce)
+
+    async def create_or_derive_api_creds(self, nonce: int = None) -> ApiCreds:
+        return await self.create_or_derive_api_key(nonce=nonce)
 
     def get_api_keys(self):
         headers = self._l2_headers("GET", GET_API_KEYS)
@@ -673,7 +686,7 @@ class ClobClient:
                 p["token_id"] = params.token_id
         return self._get(f"{self.host}{UPDATE_BALANCE_ALLOWANCE}", headers=headers, params=p)
 
-    def create_order(
+    async def create_order(
         self,
         order_args: OrderArgsV2,
         options: PartialCreateOrderOptions = None,
@@ -706,14 +719,14 @@ class ClobClient:
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
-        return self.builder.build_order(
+        return await self.builder.build_order(
             order_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,
         )
 
-    def create_market_order(
+    async def create_market_order(
         self,
         order_args: MarketOrderArgsV2,
         options: PartialCreateOrderOptions = None,
@@ -774,14 +787,14 @@ class ClobClient:
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
-        return self.builder.build_market_order(
+        return await self.builder.build_market_order(
             order_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,
         )
 
-    def create_and_post_order(
+    async def create_and_post_order(
         self,
         order_args: OrderArgsV2,
         options: PartialCreateOrderOptions = None,
@@ -789,24 +802,24 @@ class ClobClient:
         post_only: bool = False,
         defer_exec: bool = False,
     ):
-        return self._retry_on_version_update(
-            lambda: self.post_order(
-                self.create_order(order_args, options), order_type, post_only, defer_exec
-            )
-        )
+        async def submit():
+            order = await self.create_order(order_args, options)
+            return self.post_order(order, order_type, post_only, defer_exec)
 
-    def create_and_post_market_order(
+        return await self._retry_on_version_update_async(submit)
+
+    async def create_and_post_market_order(
         self,
         order_args: MarketOrderArgsV2,
         options: PartialCreateOrderOptions = None,
         order_type: OrderType = OrderType.FOK,
         defer_exec: bool = False,
     ):
-        return self._retry_on_version_update(
-            lambda: self.post_order(
-                self.create_market_order(order_args, options), order_type, False, defer_exec
-            )
-        )
+        async def submit():
+            order = await self.create_market_order(order_args, options)
+            return self.post_order(order, order_type, False, defer_exec)
+
+        return await self._retry_on_version_update_async(submit)
 
     def post_order(
         self,
@@ -1084,6 +1097,15 @@ class ClobClient:
         result = None
         for _ in range(2):
             result = func()
+            if version == self.__resolve_version():
+                break
+        return result
+
+    async def _retry_on_version_update_async(self, func):
+        version = self.__resolve_version()
+        result = None
+        for _ in range(2):
+            result = await func()
             if version == self.__resolve_version():
                 break
         return result
