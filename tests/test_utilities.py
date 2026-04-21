@@ -1,3 +1,4 @@
+import asyncio
 from unittest import TestCase
 
 from py_clob_client_v2.clob_types import CreateOrderOptions, OrderArgsV2, OrderType
@@ -22,6 +23,10 @@ signer = Signer(private_key=private_key, chain_id=chain_id)
 builder = OrderBuilder(signer)
 
 TOKEN_ID = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+
+
+def run_async(coro):
+    return asyncio.run(coro)
 
 
 class TestUtilities(TestCase):
@@ -114,7 +119,7 @@ class TestUtilities(TestCase):
     def test_order_to_json_v2_0_1(self):
         for side in [BUY, SELL]:
             for order_type in [OrderType.GTC, OrderType.GTD]:
-                order = builder.build_order(
+                order = run_async(builder.build_order(
                     OrderArgsV2(
                         token_id=TOKEN_ID,
                         price=0.5,
@@ -122,7 +127,7 @@ class TestUtilities(TestCase):
                         side=side,
                     ),
                     CreateOrderOptions(tick_size="0.1", neg_risk=False),
-                )
+                ))
                 result = order_to_json_v2(order, "owner", order_type)
                 o = result["order"]
                 self.assertIsNotNone(o["salt"])
@@ -147,10 +152,10 @@ class TestUtilities(TestCase):
 
     def test_order_to_json_v2_0_01(self):
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.56, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.01", neg_risk=False),
-            )
+            ))
             result = order_to_json_v2(order, "owner", OrderType.GTC)
             o = result["order"]
             self.assertIsNotNone(o["salt"])
@@ -161,10 +166,10 @@ class TestUtilities(TestCase):
 
     def test_order_to_json_v2_0_001(self):
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.056, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.001", neg_risk=False),
-            )
+            ))
             result = order_to_json_v2(order, "owner", OrderType.GTC)
             o = result["order"]
             self.assertIsNotNone(o["salt"])
@@ -174,10 +179,10 @@ class TestUtilities(TestCase):
 
     def test_order_to_json_v2_0_0001(self):
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.0056, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.0001", neg_risk=False),
-            )
+            ))
             result = order_to_json_v2(order, "owner", OrderType.GTC)
             o = result["order"]
             self.assertIsNotNone(o["salt"])
@@ -188,10 +193,10 @@ class TestUtilities(TestCase):
     def test_order_to_json_v2_neg_risk(self):
         for tick_size, price in [("0.1", 0.5), ("0.01", 0.56), ("0.001", 0.056), ("0.0001", 0.0056)]:
             for side in [BUY, SELL]:
-                order = builder.build_order(
+                order = run_async(builder.build_order(
                     OrderArgsV2(token_id=TOKEN_ID, price=price, size=10, side=side),
                     CreateOrderOptions(tick_size=tick_size, neg_risk=True),
-                )
+                ))
                 result = order_to_json_v2(order, "owner", OrderType.GTC)
                 o = result["order"]
                 self.assertIsNotNone(o["salt"])
@@ -201,10 +206,10 @@ class TestUtilities(TestCase):
                 self.assertNotIn("feeRateBps", o)
 
     def test_order_to_json_v2_defer_exec(self):
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=10, side=BUY),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         result = order_to_json_v2(order, "owner", OrderType.GTC, defer_exec=True)
         self.assertTrue(result["deferExec"])
 

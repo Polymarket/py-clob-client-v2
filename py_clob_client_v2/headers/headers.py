@@ -14,7 +14,7 @@ POLY_API_KEY = "POLY_API_KEY"
 POLY_PASSPHRASE = "POLY_PASSPHRASE"
 
 
-def create_level_1_headers(
+async def create_level_1_headers(
     signer: Signer, nonce: int = None, timestamp: Optional[int] = None
 ):
     """
@@ -24,7 +24,7 @@ def create_level_1_headers(
     ts = timestamp if timestamp is not None else int(datetime.now().timestamp())
     n = nonce if nonce is not None else 0
 
-    signature = sign_clob_auth_message(signer, ts, n)
+    signature = await sign_clob_auth_message(signer, ts, n)
     return {
         POLY_ADDRESS: signer.address(),
         POLY_SIGNATURE: signature,

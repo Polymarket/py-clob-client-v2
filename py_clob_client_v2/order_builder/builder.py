@@ -121,7 +121,7 @@ class OrderBuilder:
         else:
             raise ValueError(f"order_args.side must be '{BUY}' or '{SELL}'")
 
-    def build_order(
+    async def build_order(
         self,
         order_args: Union[OrderArgsV1, OrderArgsV2],
         options: CreateOrderOptions,
@@ -173,7 +173,7 @@ class OrderBuilder:
             builder = ExchangeOrderBuilderV1(
                 exchange_address, self.signer.get_chain_id(), self.signer
             )
-            return builder.build_signed_order(order_data)
+            return await builder.build_signed_order(order_data)
 
         elif version == 2:
             exchange_address = (
@@ -197,12 +197,12 @@ class OrderBuilder:
             builder = ExchangeOrderBuilderV2(
                 exchange_address, self.signer.get_chain_id(), self.signer
             )
-            return builder.build_signed_order(order_data)
+            return await builder.build_signed_order(order_data)
 
         else:
             raise ValueError(f"unsupported order version {version}")
 
-    def build_market_order(
+    async def build_market_order(
         self,
         order_args: Union[MarketOrderArgsV1, MarketOrderArgsV2],
         options: CreateOrderOptions,
@@ -254,7 +254,7 @@ class OrderBuilder:
             builder = ExchangeOrderBuilderV1(
                 exchange_address, self.signer.get_chain_id(), self.signer
             )
-            return builder.build_signed_order(order_data)
+            return await builder.build_signed_order(order_data)
 
         elif version == 2:
             exchange_address = (
@@ -277,7 +277,7 @@ class OrderBuilder:
             builder = ExchangeOrderBuilderV2(
                 exchange_address, self.signer.get_chain_id(), self.signer
             )
-            return builder.build_signed_order(order_data)
+            return await builder.build_signed_order(order_data)
 
         else:
             raise ValueError(f"unsupported order version {version}")

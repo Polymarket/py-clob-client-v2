@@ -1,3 +1,4 @@
+import asyncio
 from unittest import TestCase
 
 from py_clob_client_v2.clob_types import (
@@ -23,6 +24,10 @@ chain_id = AMOY
 signer = Signer(private_key=private_key, chain_id=chain_id)
 
 TOKEN_ID = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+
+
+def run_async(coro):
+    return asyncio.run(coro)
 
 class TestOrderBuilder(TestCase):
 
@@ -479,10 +484,10 @@ class TestOrderBuilder(TestCase):
 
     def test_build_order_buy_0_1(self):
         builder = OrderBuilder(signer)
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=100, side=BUY),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.side, Side.BUY)
         self.assertEqual(order.makerAmount, "50000000")
@@ -490,10 +495,10 @@ class TestOrderBuilder(TestCase):
 
     def test_build_order_sell_0_1(self):
         builder = OrderBuilder(signer)
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=100, side=SELL),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.side, Side.SELL)
         self.assertEqual(order.makerAmount, "100000000")
@@ -502,10 +507,10 @@ class TestOrderBuilder(TestCase):
     def test_build_order_0_01(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.56, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.01", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
             if side == BUY:
                 self.assertEqual(order.makerAmount, "11782400")
@@ -517,10 +522,10 @@ class TestOrderBuilder(TestCase):
     def test_build_order_0_001(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.056, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.001", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
             if side == BUY:
                 self.assertEqual(order.makerAmount, "1178240")
@@ -532,10 +537,10 @@ class TestOrderBuilder(TestCase):
     def test_build_order_0_0001(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_order(
+            order = run_async(builder.build_order(
                 OrderArgsV2(token_id=TOKEN_ID, price=0.0056, size=21.04, side=side),
                 CreateOrderOptions(tick_size="0.0001", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
             if side == BUY:
                 self.assertEqual(order.makerAmount, "117824")
@@ -547,10 +552,10 @@ class TestOrderBuilder(TestCase):
     def test_build_order_precision(self):
         # price=0.82, size=20.0 — tests rounding precision at 0.01 tick
         builder = OrderBuilder(signer)
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.82, size=20.0, side=BUY),
             CreateOrderOptions(tick_size="0.01", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.makerAmount, "16400000")
         self.assertEqual(order.takerAmount, "20000000")
@@ -559,115 +564,115 @@ class TestOrderBuilder(TestCase):
         builder = OrderBuilder(signer)
         for tick_size, price in [("0.1", 0.5), ("0.01", 0.56), ("0.001", 0.056), ("0.0001", 0.0056)]:
             for side in [BUY, SELL]:
-                order = builder.build_order(
+                order = run_async(builder.build_order(
                     OrderArgsV2(token_id=TOKEN_ID, price=price, size=10, side=side),
                     CreateOrderOptions(tick_size=tick_size, neg_risk=True),
-                )
+                ))
                 self._assert_signed_order_v2(order)
 
     def test_build_order_with_builder_code(self):
         builder = OrderBuilder(signer)
         builder_code = "0x" + "ab" * 32
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=100, side=BUY, builder_code=builder_code),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
 
     def test_build_order_poly_proxy_signature_type(self):
         b = OrderBuilder(signer, signature_type=SignatureTypeV2.POLY_PROXY)
-        order = b.build_order(
+        order = run_async(b.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=10, side=BUY),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.signatureType, SignatureTypeV2.POLY_PROXY)
 
     def test_build_order_gnosis_safe_signature_type(self):
         b = OrderBuilder(signer, signature_type=SignatureTypeV2.POLY_GNOSIS_SAFE)
-        order = b.build_order(
+        order = run_async(b.build_order(
             OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=10, side=BUY),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.signatureType, SignatureTypeV2.POLY_GNOSIS_SAFE)
 
     def test_build_market_order_buy_0_1(self):
         builder = OrderBuilder(signer)
-        order = builder.build_market_order(
+        order = run_async(builder.build_market_order(
             MarketOrderArgsV2(token_id=TOKEN_ID, amount=50, side=BUY, price=0.5),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.side, Side.BUY)
 
     def test_build_market_order_sell_0_1(self):
         builder = OrderBuilder(signer)
-        order = builder.build_market_order(
+        order = run_async(builder.build_market_order(
             MarketOrderArgsV2(token_id=TOKEN_ID, amount=100, side=SELL, price=0.5),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.side, Side.SELL)
 
     def test_build_market_order_0_01(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_market_order(
+            order = run_async(builder.build_market_order(
                 MarketOrderArgsV2(token_id=TOKEN_ID, amount=21.04, side=side, price=0.56),
                 CreateOrderOptions(tick_size="0.01", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
 
     def test_build_market_order_0_001(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_market_order(
+            order = run_async(builder.build_market_order(
                 MarketOrderArgsV2(token_id=TOKEN_ID, amount=21.04, side=side, price=0.056),
                 CreateOrderOptions(tick_size="0.001", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
 
     def test_build_market_order_0_0001(self):
         builder = OrderBuilder(signer)
         for side in [BUY, SELL]:
-            order = builder.build_market_order(
+            order = run_async(builder.build_market_order(
                 MarketOrderArgsV2(token_id=TOKEN_ID, amount=10, side=side, price=0.0056),
                 CreateOrderOptions(tick_size="0.0001", neg_risk=False),
-            )
+            ))
             self._assert_signed_order_v2(order)
 
     def test_build_market_order_neg_risk(self):
         builder = OrderBuilder(signer)
         for tick_size, price in [("0.1", 0.5), ("0.01", 0.56), ("0.001", 0.056), ("0.0001", 0.0056)]:
             for side in [BUY, SELL]:
-                order = builder.build_market_order(
+                order = run_async(builder.build_market_order(
                     MarketOrderArgsV2(token_id=TOKEN_ID, amount=10, side=side, price=price),
                     CreateOrderOptions(tick_size=tick_size, neg_risk=True),
-                )
+                ))
                 self._assert_signed_order_v2(order)
 
     def test_build_market_order_with_builder_code(self):
         builder = OrderBuilder(signer)
         builder_code = "0x" + "cd" * 32
-        order = builder.build_market_order(
+        order = run_async(builder.build_market_order(
             MarketOrderArgsV2(
                 token_id=TOKEN_ID, amount=50, side=BUY, price=0.5, builder_code=builder_code
             ),
             CreateOrderOptions(tick_size="0.1", neg_risk=False),
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
 
     def test_build_order_v1_has_fee_rate_bps_nonce_taker(self):
         builder = OrderBuilder(signer)
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV1(token_id=TOKEN_ID, price=0.5, size=21.04, side=BUY, nonce=7),
             CreateOrderOptions(tick_size="0.01", neg_risk=False),
             version=1,
             fee_rate_bps=1000,
-        )
+        ))
         self._assert_signed_order_v1(order)
         self.assertEqual(order.feeRateBps, "1000")
         self.assertEqual(order.nonce, "7")
@@ -676,26 +681,26 @@ class TestOrderBuilder(TestCase):
     def test_build_order_v2_has_no_fee_rate_bps_nonce(self):
         builder = OrderBuilder(signer)
         builder_code = "0x" + "ab" * 32
-        order = builder.build_order(
+        order = run_async(builder.build_order(
             OrderArgsV2(
                 token_id=TOKEN_ID, price=0.5, size=21.04, side=BUY,
                 builder_code=builder_code, expiration=1234567,
             ),
             CreateOrderOptions(tick_size="0.01", neg_risk=False),
             version=2,
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
         self.assertEqual(order.expiration, "1234567")
 
     def test_build_market_order_v1_has_fee_rate_bps_nonce_taker(self):
         builder = OrderBuilder(signer)
-        order = builder.build_market_order(
+        order = run_async(builder.build_market_order(
             MarketOrderArgsV1(token_id=TOKEN_ID, amount=21.04, side=BUY, price=0.5, nonce=3),
             CreateOrderOptions(tick_size="0.01", neg_risk=False),
             version=1,
             fee_rate_bps=500,
-        )
+        ))
         self._assert_signed_order_v1(order)
         self.assertEqual(order.feeRateBps, "500")
         self.assertEqual(order.nonce, "3")
@@ -704,13 +709,13 @@ class TestOrderBuilder(TestCase):
     def test_build_market_order_v2_has_no_fee_rate_bps_nonce(self):
         builder = OrderBuilder(signer)
         builder_code = "0x" + "ef" * 32
-        order = builder.build_market_order(
+        order = run_async(builder.build_market_order(
             MarketOrderArgsV2(
                 token_id=TOKEN_ID, amount=21.04, side=BUY, price=0.5, builder_code=builder_code
             ),
             CreateOrderOptions(tick_size="0.01", neg_risk=False),
             version=2,
-        )
+        ))
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
 

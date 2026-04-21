@@ -309,7 +309,7 @@ class RfqClient:
     # Trade execution methods
     # =========================================================================
 
-    def accept_rfq_quote(self, params: AcceptQuoteParams) -> str:
+    async def accept_rfq_quote(self, params: AcceptQuoteParams) -> str:
         """
         Accept an RFQ quote (requester side).
 
@@ -339,7 +339,7 @@ class RfqClient:
             expiration=params.expiration,
         )
 
-        order = self._build_v1_order(order_args)
+        order = await self._build_v1_order(order_args)
 
         if not order:
             raise Exception("Error creating order")
@@ -371,7 +371,7 @@ class RfqClient:
             data=serialized_body,
         )
 
-    def approve_rfq_order(self, params: ApproveOrderParams) -> str:
+    async def approve_rfq_order(self, params: ApproveOrderParams) -> str:
         """
         Approve an RFQ order (quoter side).
 
@@ -406,7 +406,7 @@ class RfqClient:
             expiration=params.expiration,
         )
 
-        order = self._build_v1_order(order_args)
+        order = await self._build_v1_order(order_args)
 
         if not order:
             raise Exception("Error creating order")
@@ -454,7 +454,7 @@ class RfqClient:
     # Private helpers
     # =========================================================================
 
-    def _build_v1_order(self, order_args: OrderArgsV1):
+    async def _build_v1_order(self, order_args: OrderArgsV1):
         """
         Build a signed V1 order via the parent's order builder.
 
@@ -463,7 +463,7 @@ class RfqClient:
         """
         tick_size = self._parent._ClobClient__resolve_tick_size(order_args.token_id)
         neg_risk = self._parent.get_neg_risk(order_args.token_id)
-        return self._parent.builder.build_order(
+        return await self._parent.builder.build_order(
             order_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=1,
