@@ -1,12 +1,13 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from json import dumps
 from typing import Literal
 
 from .constants import ZERO_ADDRESS, BYTES32_ZERO
 
 
-class OrderType:
+class OrderType(str, Enum):
     GTC = "GTC"
     FOK = "FOK"
     GTD = "GTD"
