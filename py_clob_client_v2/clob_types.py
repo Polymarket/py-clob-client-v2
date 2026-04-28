@@ -223,7 +223,7 @@ class OrderBookSummary:
         return dumps(self.__dict__, separators=(",", ":"))
 
 
-class AssetType:
+class AssetType(str, Enum):
     COLLATERAL = "COLLATERAL"
     CONDITIONAL = "CONDITIONAL"
 
@@ -425,7 +425,7 @@ class BuilderApiKeyResponse:
     revoked_at: Optional[str] = None
 
 
-class PriceHistoryInterval:
+class PriceHistoryInterval(str, Enum):
     MAX = "max"
     ONE_WEEK = "1w"
     ONE_DAY = "1d"
