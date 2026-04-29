@@ -1,4 +1,5 @@
 from .client import ClobClient
+from .constants import CLOB_HOST
 from .order_utils import SignatureTypeV2, Side
 from .clob_types import (
     PriceHistoryInterval,
@@ -46,6 +47,7 @@ from .clob_types import (
 __all__ = [
     # Main client
     "ClobClient",
+    "CLOB_HOST",
     "SignatureTypeV2",
     "Side",
     "PriceHistoryInterval",
