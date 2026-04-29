@@ -612,7 +612,6 @@ class ClobClient:
     ) -> dict:
         if not params.builder_code or params.builder_code == BYTES32_ZERO:
             raise PolyException("builder_code is required and cannot be zero")
-        headers = self._l2_headers("GET", GET_BUILDER_TRADES)
         cursor = next_cursor or INITIAL_CURSOR
         p = {"builder_code": params.builder_code}
         if params.id:
@@ -628,7 +627,7 @@ class ClobClient:
         if params.after:
             p["after"] = params.after
         p["next_cursor"] = cursor
-        response = self._get(f"{self.host}{GET_BUILDER_TRADES}", headers=headers, params=p)
+        response = self._get(f"{self.host}{GET_BUILDER_TRADES}", params=p)
         data = response.get("data", [])
         return {
             "trades": list(data) if data else [],
