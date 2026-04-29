@@ -312,14 +312,14 @@ class BuilderConfig:
 class FeeDetails:
     """Platform fee details for a market"""
 
-    fee_rate: int = 0
-    """Fee rate in basis points"""
+    fee_rate: float = 0.0
+    """Fee rate (e.g. 0.05 for 5%)"""
 
     exponent: int = 0
-    """Fee exponent for the platform fee formula"""
+    """Fee exponent (integer, e.g. 1 or 2)"""
 
-    taker_only: Optional[bool] = None
-    """If True, fee applies to takers only (omitted from API when False)"""
+    taker_only: bool = False
+    """If True, fee applies to takers only; always present when fd is present"""
 
 
 @dataclass
@@ -381,11 +381,11 @@ class MarketDetails:
     fee_details: Optional[FeeDetails] = None
     """Platform fee details"""
 
-    maker_base_fee: Optional[float] = None
-    """Maker base fee rate (from mbf field)"""
+    maker_base_fee: Optional[int] = None
+    """Maker base fee in bps (from mbf field, e.g. 1000 = 10%)"""
 
-    taker_base_fee: Optional[float] = None
-    """Taker base fee rate (from tbf field)"""
+    taker_base_fee: Optional[int] = None
+    """Taker base fee in bps (from tbf field, e.g. 1000 = 10%)"""
 
     rewards: Optional[ClobRewards] = None
     """Rewards configuration (null if unset)"""
