@@ -318,6 +318,29 @@ class FeeDetails:
     exponent: int = 0
     """Fee exponent for the platform fee formula"""
 
+    taker_only: Optional[bool] = None
+    """If True, fee applies to takers only (omitted from API when False)"""
+
+
+@dataclass
+class ClobRewards:
+    """Rewards configuration for a market"""
+
+    min_size: Optional[float] = None
+    """Minimum order size for rewards eligibility"""
+
+    max_spread: Optional[float] = None
+    """Maximum spread for rewards eligibility"""
+
+    enabled: Optional[bool] = None
+    """Whether rewards are enabled"""
+
+    skip_min_order_age: Optional[bool] = None
+    """Whether to skip minimum order age check"""
+
+    min_order_age_seconds: Optional[int] = None
+    """Minimum order age in seconds"""
+
 
 @dataclass
 class FeeInfo:
@@ -352,17 +375,47 @@ class MarketDetails:
     min_tick_size: float = None
     """Minimum tick size"""
 
-    neg_risk: bool = False
-    """Whether the market uses negative risk"""
+    neg_risk: Optional[bool] = None
+    """Whether the market uses negative risk (omitted from API when False)"""
 
     fee_details: Optional[FeeDetails] = None
     """Platform fee details"""
 
     maker_base_fee: Optional[float] = None
-    """V1 maker base fee rate (from mbf field)"""
+    """Maker base fee rate (from mbf field)"""
 
     taker_base_fee: Optional[float] = None
-    """V1 taker base fee rate (from tbf field)"""
+    """Taker base fee rate (from tbf field)"""
+
+    rewards: Optional[ClobRewards] = None
+    """Rewards configuration (null if unset)"""
+
+    accepting_orders: Optional[bool] = None
+    """Whether the market is currently accepting orders"""
+
+    min_order_size: Optional[float] = None
+    """Minimum order size"""
+
+    seconds_delay: Optional[int] = None
+    """Seconds delay"""
+
+    game_start_time: Optional[str] = None
+    """Game start time (ISO 8601)"""
+
+    clear_book_on_start: Optional[bool] = None
+    """Whether to clear the book on game start"""
+
+    accepting_orders_timestamp: Optional[str] = None
+    """Timestamp when the market started accepting orders (ISO 8601)"""
+
+    rfq_enabled: Optional[bool] = None
+    """Whether RFQ is enabled"""
+
+    taker_order_delay_enabled: Optional[bool] = None
+    """Whether taker order delay is enabled"""
+
+    blockaid_check_enabled: Optional[bool] = None
+    """Whether Blockaid check is enabled"""
 
 
 @dataclass
