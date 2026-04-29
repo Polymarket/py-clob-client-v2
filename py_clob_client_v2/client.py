@@ -136,11 +136,11 @@ class ClobClient:
         self,
         host: str,
         chain_id: int,
-        key: str = None,
-        creds: ApiCreds = None,
-        signature_type: int = None,
-        funder: str = None,
-        builder_config: BuilderConfig = None,
+        key: Optional[str] = None,
+        creds: Optional[ApiCreds] = None,
+        signature_type: Optional[int] = None,
+        funder: Optional[str] = None,
+        builder_config: Optional[BuilderConfig] = None,
         use_server_time: bool = False,
         retry_on_error: bool = False,
     ):
@@ -196,10 +196,10 @@ class ClobClient:
         self.creds = creds
         self.mode = self._get_client_mode()
 
-    def _get(self, endpoint: str, headers=None, params: dict = None):
+    def _get(self, endpoint: str, headers=None, params: Optional[dict] = None):
         return get(endpoint, headers=headers, params=params)
 
-    def _post(self, endpoint: str, headers=None, data=None, params: dict = None):
+    def _post(self, endpoint: str, headers=None, data=None, params: Optional[dict] = None):
         return post(
             endpoint,
             headers=headers,
@@ -208,7 +208,7 @@ class ClobClient:
             retry_on_error=self.retry_on_error,
         )
 
-    def _delete(self, endpoint: str, headers=None, data=None, params: dict = None):
+    def _delete(self, endpoint: str, headers=None, data=None, params: Optional[dict] = None):
         return delete(endpoint, headers=headers, data=data, params=params)
 
     def _get_timestamp(self) -> Optional[int]:
@@ -219,14 +219,14 @@ class ClobClient:
             return result.get("time") or result.get("timestamp")
         return int(result)
 
-    def _l1_headers(self, nonce: int = None) -> dict:
+    def _l1_headers(self, nonce: Optional[int] = None) -> dict:
         self.assert_level_1_auth()
         return create_level_1_headers(
             self.signer, nonce=nonce, timestamp=self._get_timestamp()
         )
 
     def _l2_headers(
-        self, method: str, endpoint: str, body=None, serialized_body: str = None
+        self, method: str, endpoint: str, body=None, serialized_body: Optional[str] = None
     ) -> dict:
         self.assert_level_2_auth()
         request_args = RequestArgs(
@@ -455,7 +455,7 @@ class ClobClient:
             results.extend(response["data"])
         return results
 
-    def create_api_key(self, nonce: int = None) -> ApiCreds:
+    def create_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         headers = self._l1_headers(nonce=nonce)
         resp = self._post(f"{self.host}{CREATE_API_KEY}", headers=headers)
         return ApiCreds(
@@ -464,7 +464,7 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def derive_api_key(self, nonce: int = None) -> ApiCreds:
+    def derive_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         headers = self._l1_headers(nonce=nonce)
         resp = self._get(f"{self.host}{DERIVE_API_KEY}", headers=headers)
         return ApiCreds(
@@ -473,7 +473,7 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
+    def create_or_derive_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         try:
             resp = self.create_api_key(nonce=nonce)
             if resp.api_key:
@@ -503,7 +503,7 @@ class ClobClient:
         self,
         params: OpenOrderParams = None,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", ORDERS)
         results = []
@@ -528,7 +528,7 @@ class ClobClient:
     def get_pre_migration_orders(
         self,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", PRE_MIGRATION_ORDERS)
         results = []
@@ -546,7 +546,7 @@ class ClobClient:
         self,
         params: TradeParams = None,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", TRADES)
         results = []
@@ -577,7 +577,7 @@ class ClobClient:
     def get_trades_paginated(
         self,
         params: TradeParams = None,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> dict:
         headers = self._l2_headers("GET", TRADES)
         cursor = next_cursor or INITIAL_CURSOR
@@ -608,7 +608,7 @@ class ClobClient:
     def get_builder_trades(
         self,
         params: BuilderTradeParams,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> dict:
         if not params.builder_code or params.builder_code == BYTES32_ZERO:
             raise PolyException("builder_code is required and cannot be zero")
@@ -1024,7 +1024,7 @@ class ClobClient:
             return tick_size
         return min_tick_size
 
-    def __resolve_fee_rate_bps(self, token_id: str, user_fee_rate_bps: int = None) -> int:
+    def __resolve_fee_rate_bps(self, token_id: str, user_fee_rate_bps: Optional[int] = None) -> int:
         market_fee_rate_bps = self.get_fee_rate_bps(token_id)
         if (
             market_fee_rate_bps > 0

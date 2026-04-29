@@ -166,19 +166,19 @@ MarketOrderArgs = MarketOrderArgsV2
 
 @dataclass
 class TradeParams:
-    id: str = None
-    maker_address: str = None
-    market: str = None
-    asset_id: str = None
-    before: int = None
-    after: int = None
+    id: Optional[str] = None
+    maker_address: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    before: Optional[int] = None
+    after: Optional[int] = None
 
 
 @dataclass
 class OpenOrderParams:
-    id: str = None
-    market: str = None
-    asset_id: str = None
+    id: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
 
 
 @dataclass
@@ -188,8 +188,8 @@ class DropNotificationParams:
 
 @dataclass
 class OrderSummary:
-    price: str = None
-    size: str = None
+    price: Optional[str] = None
+    size: Optional[str] = None
 
     @property
     def __dict__(self):
@@ -202,16 +202,16 @@ class OrderSummary:
 
 @dataclass
 class OrderBookSummary:
-    market: str = None
-    asset_id: str = None
-    timestamp: str = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    timestamp: Optional[str] = None
     bids: Optional[list] = None
     asks: Optional[list] = None
-    min_order_size: str = None
-    neg_risk: bool = None
-    tick_size: str = None
-    last_trade_price: str = None
-    hash: str = None
+    min_order_size: Optional[str] = None
+    neg_risk: Optional[bool] = None
+    tick_size: Optional[str] = None
+    last_trade_price: Optional[str] = None
+    hash: Optional[str] = None
 
     @property
     def __dict__(self):
@@ -230,7 +230,7 @@ class AssetType:
 @dataclass
 class BalanceAllowanceParams:
     asset_type: AssetType = None
-    token_id: str = None
+    token_id: Optional[str] = None
     signature_type: int = -1
 
 
@@ -372,7 +372,7 @@ class MarketDetails:
     tokens: Tuple = None
     """(YES token, NO token)"""
 
-    min_tick_size: float = None
+    min_tick_size: Optional[float] = None
     """Minimum tick size"""
 
     neg_risk: Optional[bool] = None
@@ -449,18 +449,18 @@ class OrderScoring:
 @dataclass
 class BuilderTradeParams:
     builder_code: str
-    id: str = None
-    maker_address: str = None
-    market: str = None
-    asset_id: str = None
-    before: str = None
-    after: str = None
+    id: Optional[str] = None
+    maker_address: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    before: Optional[str] = None
+    after: Optional[str] = None
 
 
 @dataclass
 class OrderMarketCancelParams:
-    market: str = None
-    asset_id: str = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
 
 
 @dataclass
@@ -487,22 +487,22 @@ class PriceHistoryInterval:
 
 @dataclass
 class PricesHistoryParams:
-    market: str = None
-    start_ts: int = None
-    end_ts: int = None
-    fidelity: int = None
-    interval: str = None
+    market: Optional[str] = None
+    start_ts: Optional[int] = None
+    end_ts: Optional[int] = None
+    fidelity: Optional[int] = None
+    interval: Optional[str] = None
 
 
 @dataclass
 class EarningsParams:
-    date: str = None
+    date: Optional[str] = None
     """Date in YYYY-MM-DD format"""
 
-    market: str = None
+    market: Optional[str] = None
 
 
 @dataclass
 class RewardsMarketsParams:
-    condition_id: str = None
-    next_cursor: str = None
+    condition_id: Optional[str] = None
+    next_cursor: Optional[str] = None

@@ -15,7 +15,7 @@ POLY_PASSPHRASE = "POLY_PASSPHRASE"
 
 
 def create_level_1_headers(
-    signer: Signer, nonce: int = None, timestamp: Optional[int] = None
+    signer: Signer, nonce: Optional[int] = None, timestamp: Optional[int] = None
 ):
     """
     Creates Level 1 Poly headers for a request.
