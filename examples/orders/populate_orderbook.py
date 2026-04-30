@@ -24,7 +24,10 @@ def main():
 
     options = PartialCreateOrderOptions(tick_size="0.01")
 
-    YES = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+    YES = os.environ.get(
+        "YES_TOKEN_ID",
+        "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+    )
     yes_bid = client.create_order(OrderArgs(token_id=YES, price=0.4, side=Side.BUY, size=100), options)
     print("creating order", yes_bid)
     client.post_order(yes_bid)
@@ -33,7 +36,10 @@ def main():
     print("creating order", yes_ask)
     client.post_order(yes_ask)
 
-    NO = "52114319501245915516055106046884209969926127482827954674443846427813813222426"
+    NO = os.environ.get(
+        "NO_TOKEN_ID",
+        "52114319501245915516055106046884209969926127482827954674443846427813813222426",
+    )
     no_bid = client.create_order(OrderArgs(token_id=NO, price=0.4, side=Side.BUY, size=100), options)
     print("creating order", no_bid)
     client.post_order(no_bid)

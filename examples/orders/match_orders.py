@@ -11,7 +11,10 @@ load_dotenv()
 # This example uses two separate wallets (PK and PK2) with their own API credentials
 # so the orders can actually fill against each other.
 
-YES = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+YES = os.environ.get(
+    "YES_TOKEN_ID",
+    "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+)
 
 
 def main():

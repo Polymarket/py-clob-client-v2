@@ -6,6 +6,15 @@ from py_clob_client_v2 import ClobClient, ApiCreds, BalanceAllowanceParams, Asse
 
 load_dotenv()
 
+YES = os.environ.get(
+    "YES_TOKEN_ID",
+    "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+)
+NO = os.environ.get(
+    "NO_TOKEN_ID",
+    "52114319501245915516055106046884209969926127482827954674443846427813813222426",
+)
+
 
 def main():
     pk = os.environ["PK"]
@@ -26,13 +35,13 @@ def main():
 
     yes = client.get_balance_allowance(BalanceAllowanceParams(
         asset_type=AssetType.CONDITIONAL,
-        token_id="71321045679252212594626385532706912750332728571942532289631379312455583992563",
+        token_id=YES,
     ))
     print(yes)
 
     no = client.get_balance_allowance(BalanceAllowanceParams(
         asset_type=AssetType.CONDITIONAL,
-        token_id="52114319501245915516055106046884209969926127482827954674443846427813813222426",
+        token_id=NO,
     ))
     print(no)
 

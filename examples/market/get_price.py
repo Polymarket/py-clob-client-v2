@@ -5,8 +5,14 @@ from py_clob_client_v2 import ClobClient
 
 load_dotenv()
 
-YES = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
-NO = "52114319501245915516055106046884209969926127482827954674443846427813813222426"
+YES = os.environ.get(
+    "YES_TOKEN_ID",
+    "78433024518676680431174478322854148606578065650008220678402966840627347604025",
+)
+NO = os.environ.get(
+    "NO_TOKEN_ID",
+    "50346565575310273995396997144874891836871065259829083228393044602519086496922",
+)
 
 
 def main():
@@ -14,10 +20,10 @@ def main():
     chain_id = int(os.environ.get("CHAIN_ID", 80002))
     client = ClobClient(host=host, chain_id=chain_id)
 
-    print("YES BUY", client.get_price(YES, "buy"))
-    print("YES SELL", client.get_price(YES, "sell"))
-    print("NO BUY", client.get_price(NO, "buy"))
-    print("NO SELL", client.get_price(NO, "sell"))
+    print("YES BUY", client.get_price(YES, "BUY"))
+    print("YES SELL", client.get_price(YES, "SELL"))
+    print("NO BUY", client.get_price(NO, "BUY"))
+    print("NO SELL", client.get_price(NO, "SELL"))
 
 
 if __name__ == "__main__":

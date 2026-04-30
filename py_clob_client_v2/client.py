@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import asdict, is_dataclass
 from typing import Optional
 
 from .clob_types import (
@@ -119,6 +120,7 @@ from .utilities import (
     adjust_market_buy_amount,
     generate_orderbook_summary_hash,
     is_tick_size_smaller,
+    parse_raw_orderbook_summary,
     price_valid,
 )
 from .order_utils.model.order_data_v1 import order_to_json_v1
@@ -127,9 +129,22 @@ from .order_utils.model.side import Side
 
 logger = logging.getLogger(__name__)
 
+
 def _is_v2_order(order) -> bool:
     """Returns True if order is a V2 signed order (has timestamp field)."""
     return hasattr(order, "timestamp")
+
+
+def _book_params_to_json(params: list) -> list:
+    payload = []
+    for param in params:
+        item = asdict(param) if is_dataclass(param) else dict(param)
+        side = item.get("side")
+        if isinstance(side, int):
+            item["side"] = "BUY" if side == Side.BUY else "SELL"
+        payload.append({k: v for k, v in item.items() if v is not None and v != ""})
+    return payload
+
 
 class ClobClient:
     def __init__(
@@ -315,9 +330,13 @@ class ClobClient:
         )
 
     def get_order_books(self, params: list):
-        return self._post(f"{self.host}{GET_ORDER_BOOKS}", data=params)
+        return self._post(
+            f"{self.host}{GET_ORDER_BOOKS}", data=_book_params_to_json(params)
+        )
 
     def get_order_book_hash(self, orderbook: OrderBookSummary) -> str:
+        if isinstance(orderbook, dict):
+            orderbook = parse_raw_orderbook_summary(orderbook)
         return generate_orderbook_summary_hash(orderbook)
 
     def get_tick_size(self, token_id: str) -> TickSize:
@@ -368,7 +387,9 @@ class ClobClient:
         return self._get(f"{self.host}{GET_MIDPOINT}", params={"token_id": token_id})
 
     def get_midpoints(self, params: list):
-        return self._post(f"{self.host}{GET_MIDPOINTS}", data=params)
+        return self._post(
+            f"{self.host}{GET_MIDPOINTS}", data=_book_params_to_json(params)
+        )
 
     def get_price(self, token_id: str, side):
         if isinstance(side, int):
@@ -378,13 +399,17 @@ class ClobClient:
         )
 
     def get_prices(self, params: list):
-        return self._post(f"{self.host}{GET_PRICES}", data=params)
+        return self._post(
+            f"{self.host}{GET_PRICES}", data=_book_params_to_json(params)
+        )
 
     def get_spread(self, token_id: str):
         return self._get(f"{self.host}{GET_SPREAD}", params={"token_id": token_id})
 
     def get_spreads(self, params: list):
-        return self._post(f"{self.host}{GET_SPREADS}", data=params)
+        return self._post(
+            f"{self.host}{GET_SPREADS}", data=_book_params_to_json(params)
+        )
 
     def get_last_trade_price(self, token_id: str):
         return self._get(
@@ -392,7 +417,10 @@ class ClobClient:
         )
 
     def get_last_trades_prices(self, params: list):
-        return self._post(f"{self.host}{GET_LAST_TRADES_PRICES}", data=params)
+        return self._post(
+            f"{self.host}{GET_LAST_TRADES_PRICES}",
+            data=_book_params_to_json(params),
+        )
 
     def get_prices_history(self, params: PricesHistoryParams):
         if params.interval is None and (params.start_ts is None or params.end_ts is None):

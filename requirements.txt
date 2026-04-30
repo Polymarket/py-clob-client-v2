@@ -1,5 +1,6 @@
 black==24.4.2
 eth-account==0.13.0
+eth-abi==5.2.0
 eth-utils==4.1.1
 poly_eip712_structs==0.0.1
 py_order_utils==0.3.2
