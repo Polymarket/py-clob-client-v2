@@ -111,7 +111,7 @@ class TestExchangeOrderBuilderV2CTF(TestCase):
             },
         )
 
-    def test_build_order_signature_poly_1271_matches_ts_vector(self):
+    def test_build_order_signature_poly_1271_matches_expected_signature(self):
         order = self.builder.build_order(_poly_1271_order_data())
         typed_data = self.builder.build_order_typed_data(order)
         signature = self.builder.build_order_signature(typed_data)
@@ -120,7 +120,7 @@ class TestExchangeOrderBuilderV2CTF(TestCase):
         self.assertEqual(signature, EXPECTED_POLY_1271_SIGNATURE)
         self.assertEqual(len(signature), expected_length)
 
-    def test_build_signed_order_poly_1271_matches_ts_vector(self):
+    def test_build_signed_order_poly_1271_matches_expected_signature(self):
         signed = self.builder.build_signed_order(_poly_1271_order_data())
 
         self.assertEqual(signed.maker, DEPOSIT_WALLET)
