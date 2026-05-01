@@ -104,7 +104,7 @@ from .endpoints import (
     UPDATE_BALANCE_ALLOWANCE,
     VERSION,
 )
-from .exceptions import PolyException
+from .exceptions import PolyApiException, PolyException
 from .headers.headers import create_level_1_headers, create_level_2_headers
 from .http_helpers.helpers import (
     delete,
@@ -501,13 +501,22 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
+    # Status codes from create_api_key that mean "a key already exists,
+    # derive instead". Conservatively narrow: 409 Conflict is the idiomatic
+    # shape, 400 covers servers that overload it for the same condition.
+    # 401/403/429/5xx/network errors are NOT in this set — they propagate
+    # so the caller can handle auth, rate-limit, or upstream failures
+    # instead of silently receiving a derived key they did not ask for.
+    _CREATE_API_KEY_DERIVE_FALLBACK_STATUSES = frozenset({400, 409})
+
     def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
         try:
             resp = self.create_api_key(nonce=nonce)
             if resp.api_key:
                 return resp
-        except Exception:
-            pass
+        except PolyApiException as exc:
+            if exc.status_code not in self._CREATE_API_KEY_DERIVE_FALLBACK_STATUSES:
+                raise
         return self.derive_api_key(nonce=nonce)
 
     def get_api_keys(self):
