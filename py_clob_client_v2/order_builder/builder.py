@@ -58,6 +58,11 @@ class OrderBuilder:
         # Used for Polymarket proxy wallets and other smart contract wallets.
         self.funder = funder if funder is not None else (self.signer.address() if self.signer else None)
 
+    def _v2_order_signer(self) -> str:
+        if self.signature_type == SignatureTypeV2.POLY_1271:
+            return self.funder
+        return self.signer.address()
+
     def get_order_amounts(
         self, side, size: float, price: float, round_config: RoundConfig
     ):
@@ -187,7 +192,7 @@ class OrderBuilder:
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
-                signer=self.signer.address(),
+                signer=self._v2_order_signer(),
                 signatureType=self.signature_type,
                 timestamp=ts,
                 metadata=getattr(order_args, "metadata", BYTES32_ZERO),
@@ -268,7 +273,7 @@ class OrderBuilder:
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
-                signer=self.signer.address(),
+                signer=self._v2_order_signer(),
                 signatureType=self.signature_type,
                 timestamp=ts,
                 metadata=getattr(order_args, "metadata", BYTES32_ZERO),

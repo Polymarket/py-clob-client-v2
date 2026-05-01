@@ -1,10 +1,16 @@
 import os
-import time
-from dotenv import load_dotenv
-from eth_account import Account
 
-from py_clob_client_v2 import ClobClient, ApiCreds, OrderType, OrderArgs, PartialCreateOrderOptions
-from py_clob_client_v2 import Side
+from dotenv import load_dotenv
+
+from py_clob_client_v2 import (
+    ApiCreds,
+    ClobClient,
+    OrderArgs,
+    OrderType,
+    PartialCreateOrderOptions,
+    Side,
+    SignatureTypeV2,
+)
 
 load_dotenv()
 
@@ -16,7 +22,7 @@ YES = os.environ.get(
 
 def main():
     pk = os.environ["PK"]
-    account = Account.from_key(pk)
+    deposit_wallet = os.environ["DEPOSIT_WALLET"]
     chain_id = int(os.environ.get("CHAIN_ID", 80002))
     host = os.environ.get("CLOB_API_URL", "http://localhost:8080")
     creds = ApiCreds(
@@ -24,14 +30,21 @@ def main():
         api_secret=os.environ["CLOB_SECRET"],
         api_passphrase=os.environ["CLOB_PASS_PHRASE"],
     )
-    client = ClobClient(host=host, chain_id=chain_id, key=pk, creds=creds)
 
-    expiration = int(time.time()) + 70
+    client = ClobClient(
+        host=host,
+        chain_id=chain_id,
+        key=pk,
+        creds=creds,
+        signature_type=SignatureTypeV2.POLY_1271,
+        funder=deposit_wallet,
+    )
 
+    # Requires the deposit wallet to be deployed, funded, and approved.
     resp = client.create_and_post_order(
-        order_args=OrderArgs(token_id=YES, price=0.4, side=Side.BUY, size=100, expiration=expiration),
+        order_args=OrderArgs(token_id=YES, price=0.4, side=Side.BUY, size=100),
         options=PartialCreateOrderOptions(tick_size="0.01"),
-        order_type=OrderType.GTD,
+        order_type=OrderType.GTC,
     )
     print(resp)
 

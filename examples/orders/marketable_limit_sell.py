@@ -9,7 +9,10 @@ load_dotenv()
 # A marketable limit sell crosses the spread and fills immediately against resting bids.
 # CLOB blocks self-trading, so a second wallet seeds the bid that wallet1 will fill against.
 
-YES = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+YES = os.environ.get(
+    "YES_TOKEN_ID",
+    "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+)
 PRICE = 0.5
 SIZE = 100
 

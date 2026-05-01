@@ -13,6 +13,7 @@ from py_clob_client_v2.constants import AMOY, BYTES32_ZERO, ZERO_ADDRESS
 from py_clob_client_v2.order_builder.builder import OrderBuilder, ROUNDING_CONFIG
 from py_clob_client_v2.order_builder.constants import BUY, SELL
 from py_clob_client_v2.order_builder.helpers import decimal_places, round_down, round_normal
+from py_clob_client_v2.order_utils.exchange_order_builder_v2 import ORDER_TYPE_STRING
 from py_clob_client_v2.order_utils.model import Side, SignatureTypeV2
 from py_clob_client_v2.signer import Signer
 from py_clob_client_v2.utilities import adjust_market_buy_amount
@@ -23,6 +24,7 @@ chain_id = AMOY
 signer = Signer(private_key=private_key, chain_id=chain_id)
 
 TOKEN_ID = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+DEPOSIT_WALLET = "0x1111111111111111111111111111111111111111"
 
 class TestOrderBuilder(TestCase):
 
@@ -477,6 +479,15 @@ class TestOrderBuilder(TestCase):
         self.assertFalse(hasattr(order, "nonce"))
         self.assertFalse(hasattr(order, "feeRateBps"))
 
+    def _assert_poly_1271_order(self, order):
+        self._assert_signed_order_v2(order)
+        self.assertEqual(order.maker, DEPOSIT_WALLET)
+        self.assertEqual(order.signer, DEPOSIT_WALLET)
+        self.assertEqual(order.signatureType, SignatureTypeV2.POLY_1271)
+        self.assertTrue(order.signature.startswith("0x"))
+        expected_signature_len = 2 + 130 + 64 + 64 + (len(ORDER_TYPE_STRING) * 2) + 4
+        self.assertEqual(len(order.signature), expected_signature_len)
+
     def test_build_order_buy_0_1(self):
         builder = OrderBuilder(signer)
         order = builder.build_order(
@@ -593,6 +604,18 @@ class TestOrderBuilder(TestCase):
         self._assert_signed_order_v2(order)
         self.assertEqual(order.signatureType, SignatureTypeV2.POLY_GNOSIS_SAFE)
 
+    def test_build_order_poly_1271_signature_type(self):
+        b = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        order = b.build_order(
+            OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=10, side=BUY),
+            CreateOrderOptions(tick_size="0.1", neg_risk=False),
+        )
+        self._assert_poly_1271_order(order)
+
     def test_build_market_order_buy_0_1(self):
         builder = OrderBuilder(signer)
         order = builder.build_market_order(
@@ -660,6 +683,18 @@ class TestOrderBuilder(TestCase):
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
 
+    def test_build_market_order_poly_1271_signature_type(self):
+        b = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        order = b.build_market_order(
+            MarketOrderArgsV2(token_id=TOKEN_ID, amount=50, side=BUY, price=0.5),
+            CreateOrderOptions(tick_size="0.1", neg_risk=False),
+        )
+        self._assert_poly_1271_order(order)
+
     def test_build_order_v1_has_fee_rate_bps_nonce_taker(self):
         builder = OrderBuilder(signer)
         order = builder.build_order(
@@ -700,6 +735,37 @@ class TestOrderBuilder(TestCase):
         self.assertEqual(order.feeRateBps, "500")
         self.assertEqual(order.nonce, "3")
         self.assertEqual(order.taker, ZERO_ADDRESS)
+
+    def test_build_order_v1_rejects_poly_1271(self):
+        builder = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        with self.assertRaises(ValueError):
+            builder.build_order(
+                OrderArgsV1(token_id=TOKEN_ID, price=0.5, size=21.04, side=BUY),
+                CreateOrderOptions(tick_size="0.01", neg_risk=False),
+                version=1,
+            )
+
+    def test_build_market_order_v1_rejects_poly_1271(self):
+        builder = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        with self.assertRaises(ValueError):
+            builder.build_market_order(
+                MarketOrderArgsV1(
+                    token_id=TOKEN_ID,
+                    amount=21.04,
+                    side=BUY,
+                    price=0.5,
+                ),
+                CreateOrderOptions(tick_size="0.01", neg_risk=False),
+                version=1,
+            )
 
     def test_build_market_order_v2_has_no_fee_rate_bps_nonce(self):
         builder = OrderBuilder(signer)

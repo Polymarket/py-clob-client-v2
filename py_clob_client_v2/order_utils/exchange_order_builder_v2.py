@@ -1,5 +1,6 @@
 import dataclasses
 import time
+from eth_abi import encode as abi_encode
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 from eth_utils import keccak as _keccak
@@ -7,6 +8,7 @@ from eth_utils import keccak as _keccak
 
 def _hash_message(msg) -> bytes:
     return _keccak(primitive=b"\x19" + msg.version + msg.header + msg.body)
+
 
 from ..signer import Signer
 from ..constants import BYTES32_ZERO
@@ -21,9 +23,39 @@ from .model.ctf_exchange_v2_typed_data import (
 from .utils import generate_order_salt
 
 
+ORDER_TYPE_STRING = (
+    "Order(uint256 salt,address maker,address signer,uint256 tokenId,"
+    "uint256 makerAmount,uint256 takerAmount,uint8 side,uint8 signatureType,"
+    "uint256 timestamp,bytes32 metadata,bytes32 builder)"
+)
+SOLADY_TYPE_STRING = (
+    "TypedDataSign(Order contents,string name,string version,uint256 chainId,"
+    "address verifyingContract,bytes32 salt)"
+    f"{ORDER_TYPE_STRING}"
+)
+DOMAIN_TYPE_STRING = (
+    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+)
+
+ORDER_TYPE_HASH = _keccak(text=ORDER_TYPE_STRING)
+DOMAIN_TYPE_HASH = _keccak(text=DOMAIN_TYPE_STRING)
+SOLADY_TYPE_HASH = _keccak(text=SOLADY_TYPE_STRING)
+DEPOSIT_WALLET_NAME_HASH = _keccak(text="DepositWallet")
+DEPOSIT_WALLET_VERSION_HASH = _keccak(text="1")
+CTF_EXCHANGE_NAME_HASH = _keccak(text=CTF_EXCHANGE_V2_DOMAIN_NAME)
+CTF_EXCHANGE_VERSION_HASH = _keccak(text=CTF_EXCHANGE_V2_DOMAIN_VERSION)
+DEPOSIT_WALLET_DOMAIN_SALT = bytes.fromhex(BYTES32_ZERO.replace("0x", "").zfill(64))
+
+
 def _hex_to_bytes32(hex_str: str) -> bytes:
     """Convert a 0x-prefixed hex string to a 32-byte value."""
     return bytes.fromhex(hex_str.replace("0x", "").zfill(64))
+
+
+def _bytes32(value) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    return _hex_to_bytes32(value)
 
 
 class ExchangeOrderBuilderV2:
@@ -38,6 +70,18 @@ class ExchangeOrderBuilderV2:
         self.chain_id = chain_id
         self.signer = signer
         self.generate_salt = generate_salt
+        self.app_domain_separator = _keccak(
+            primitive=abi_encode(
+                ["bytes32", "bytes32", "bytes32", "uint256", "address"],
+                [
+                    DOMAIN_TYPE_HASH,
+                    CTF_EXCHANGE_NAME_HASH,
+                    CTF_EXCHANGE_VERSION_HASH,
+                    chain_id,
+                    contract_address,
+                ],
+            )
+        )
 
     def build_signed_order(self, order_data: OrderDataV2) -> SignedOrderV2:
         order = self.build_order(order_data)
@@ -47,8 +91,16 @@ class ExchangeOrderBuilderV2:
 
     def build_order(self, order_data: OrderDataV2) -> OrderV2:
         signer_addr = order_data.signer if order_data.signer else order_data.maker
+        signature_type = (
+            SignatureTypeV2(order_data.signatureType)
+            if order_data.signatureType is not None
+            else SignatureTypeV2.EOA
+        )
 
-        if signer_addr != self.signer.address():
+        if (
+            signature_type != SignatureTypeV2.POLY_1271
+            and signer_addr != self.signer.address()
+        ):
             raise ValueError("signer does not match")
 
         return OrderV2(
@@ -59,11 +111,7 @@ class ExchangeOrderBuilderV2:
             makerAmount=order_data.makerAmount,
             takerAmount=order_data.takerAmount,
             side=order_data.side,
-            signatureType=(
-                order_data.signatureType
-                if order_data.signatureType is not None
-                else SignatureTypeV2.EOA
-            ),
+            signatureType=signature_type,
             timestamp=(
                 order_data.timestamp
                 if order_data.timestamp
@@ -103,9 +151,90 @@ class ExchangeOrderBuilderV2:
         }
 
     def build_order_signature(self, typed_data: dict) -> str:
+        if typed_data["message"]["signatureType"] == int(SignatureTypeV2.POLY_1271):
+            return self._build_poly_1271_order_signature(typed_data)
+
         encoded = encode_typed_data(full_message=typed_data)
         signed = Account.sign_message(encoded, private_key=self.signer.private_key)
         return "0x" + signed.signature.hex()
+
+    def _build_poly_1271_order_signature(self, typed_data: dict) -> str:
+        message = typed_data["message"]
+        contents_hash = _keccak(
+            primitive=abi_encode(
+                [
+                    "bytes32",
+                    "uint256",
+                    "address",
+                    "address",
+                    "uint256",
+                    "uint256",
+                    "uint256",
+                    "uint8",
+                    "uint8",
+                    "uint256",
+                    "bytes32",
+                    "bytes32",
+                ],
+                [
+                    ORDER_TYPE_HASH,
+                    int(message["salt"]),
+                    message["maker"],
+                    message["signer"],
+                    int(message["tokenId"]),
+                    int(message["makerAmount"]),
+                    int(message["takerAmount"]),
+                    int(message["side"]),
+                    int(message["signatureType"]),
+                    int(message["timestamp"]),
+                    _bytes32(message["metadata"]),
+                    _bytes32(message["builder"]),
+                ],
+            )
+        )
+        typed_data_sign_struct_hash = _keccak(
+            primitive=abi_encode(
+                [
+                    "bytes32",
+                    "bytes32",
+                    "bytes32",
+                    "bytes32",
+                    "uint256",
+                    "address",
+                    "bytes32",
+                ],
+                [
+                    SOLADY_TYPE_HASH,
+                    contents_hash,
+                    DEPOSIT_WALLET_NAME_HASH,
+                    DEPOSIT_WALLET_VERSION_HASH,
+                    self.chain_id,
+                    message["signer"],
+                    DEPOSIT_WALLET_DOMAIN_SALT,
+                ],
+            )
+        )
+        digest = _keccak(
+            primitive=(
+                b"\x19\x01" + self.app_domain_separator + typed_data_sign_struct_hash
+            )
+        )
+        signed = Account._sign_hash(digest, private_key=self.signer.private_key)
+        inner_signature = signed.signature.hex()
+        if inner_signature.startswith("0x"):
+            inner_signature = inner_signature[2:]
+
+        contents_type = ORDER_TYPE_STRING.encode("utf-8").hex()
+        contents_type_len = len(ORDER_TYPE_STRING).to_bytes(2, "big").hex()
+
+        return (
+            "0x"
+            + inner_signature
+            + self.app_domain_separator.hex()
+            + contents_hash.hex()
+            + contents_type
+            + contents_type_len
+        )
 
     def build_order_hash(self, typed_data: dict) -> str:
         encoded = encode_typed_data(full_message=typed_data)

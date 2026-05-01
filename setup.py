@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="py_clob_client_v2",
-    version="1.0.0",
+    version="1.0.1rc1",
     author="Polymarket Engineering",
     author_email="engineering@polymarket.com",
     maintainer="Polymarket Engineering",
@@ -17,6 +17,7 @@ setuptools.setup(
     url="https://github.com/Polymarket/py-clob-client-v2",
     install_requires=[
         "eth-account>=0.13.0",
+        "eth-abi>=5.0.0",
         "eth-utils>=4.1.1",
         "poly_eip712_structs>=0.0.1",
         "py-order-utils>=0.3.2",
