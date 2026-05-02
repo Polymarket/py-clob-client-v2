@@ -1,3 +1,18 @@
+import importlib.metadata
+
+# Package version — resolved from installed metadata at import time;
+# falls back to the setup.py literal when running from source without install.
+try:
+    __version__: str = importlib.metadata.version("py_clob_client_v2")
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "1.0.1rc1"
+
+# Default User-Agent sent with every outbound HTTP request.
+# Cloudflare's bot-detection layer blocks the bare "python-httpx/X.Y" UA
+# (and the previous unversioned "py_clob_client_v2" string — issues #38/#41).
+# Override at runtime via the POLY_USER_AGENT environment variable.
+DEFAULT_USER_AGENT: str = f"polymarket-clob-client-v2/{__version__}"
+
 # Access levels
 L0 = 0
 L1 = 1

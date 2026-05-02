@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import httpx
@@ -11,6 +12,7 @@ from py_clob_client_v2.clob_types import (
     OrdersScoringParams,
     TradeParams,
 )
+from ..constants import DEFAULT_USER_AGENT
 from ..exceptions import PolyApiException
 
 logger = logging.getLogger(__name__)
@@ -22,10 +24,25 @@ PUT = "PUT"
 
 _http_client = httpx.Client(http2=True)
 
+
+def _resolve_user_agent() -> str:
+    """Return the effective User-Agent string.
+
+    Precedence (highest to lowest):
+
+    1. ``POLY_USER_AGENT`` environment variable — allows operators to inject a
+       custom UA without patching the library (useful for whitelisted IPs or
+       enterprise Cloudflare bypass tokens).
+    2. ``DEFAULT_USER_AGENT`` constant — ``polymarket-clob-client-v2/{version}``
+       which resolves the Cloudflare 403 on ``/auth/api-key`` (issues #38 / #41).
+    """
+    return os.environ.get("POLY_USER_AGENT", DEFAULT_USER_AGENT)
+
+
 def _overload_headers(method: str, headers: dict) -> dict:
     if headers is None:
         headers = {}
-    headers["User-Agent"] = "py_clob_client_v2"
+    headers["User-Agent"] = _resolve_user_agent()
     headers["Accept"] = "*/*"
     headers["Connection"] = "keep-alive"
     headers["Content-Type"] = "application/json"
