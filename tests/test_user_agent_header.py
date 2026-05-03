@@ -225,11 +225,24 @@ class TestOverloadHeadersInjectsUA(TestCase):
         # makes httpx fail to decode any ``Content-Encoding: br`` reply
         # from Cloudflare. Since brotli is NOT a declared dependency of
         # py-clob-client-v2, the Accept-Encoding header MUST omit "br".
+        #
+        # IMPORTANT: tokens MUST be stripped before the membership check.
+        # ``"gzip, deflate, br".split(",")`` returns ``["gzip", " deflate",
+        # " br"]`` (with leading whitespace) so a naïve ``"br" not in
+        # split(",")`` would PASS the regression even though brotli is
+        # advertised — the test would silently fail to guard against the
+        # bug it was written to prevent. Found by Cursor Bugbot on PR #42
+        # (commit 7d78df5).
         result = _overload_headers(GET, None)
         ae = result.get("Accept-Encoding", "")
-        self.assertNotIn("br", ae.split(","), f"Accept-Encoding leaks 'br' without brotli dep: {ae!r}")
+        tokens = [token.strip().lower() for token in ae.split(",")]
+        self.assertNotIn("br", tokens, f"Accept-Encoding leaks 'br' without brotli dep: {ae!r}")
+        # Defensive: the same bug class can hide as ``"br;q=0.5"`` etc.
+        # — strip the parameter suffix too.
+        bare_tokens = [token.split(";")[0].strip().lower() for token in ae.split(",")]
+        self.assertNotIn("br", bare_tokens, f"Accept-Encoding leaks 'br;q=...' variant: {ae!r}")
         # Sanity: deflate is fine because httpx ships built-in support.
-        self.assertIn("deflate", ae)
+        self.assertIn("deflate", tokens)
 
     def test_post_omits_accept_encoding(self) -> None:
         result = _overload_headers(POST, None)
