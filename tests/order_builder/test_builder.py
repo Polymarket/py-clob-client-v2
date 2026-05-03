@@ -817,9 +817,8 @@ class TestAdjustMarketBuyAmount(TestCase):
 
     # --- conditional: adjustment triggers ---
 
-    def test_no_adjustment_when_balance_exactly_covers_cost(self):
-        # when balance == total_cost, the adjustment formula algebraically recovers the
-        # original amount — user can afford exactly amount + fees, so nothing changes
+    def test_balance_equals_total_cost_returns_amount(self):
+        # balance = amount + fee(amount): enters branch but result == amount
         amount, price, fee_rate, fee_exponent = 50, 0.5, 0.25, 2
         total = self._total_cost(amount, price, fee_rate, fee_exponent)
         result = adjust_market_buy_amount(amount, total, price, fee_rate, fee_exponent)
@@ -831,49 +830,49 @@ class TestAdjustMarketBuyAmount(TestCase):
         result = adjust_market_buy_amount(amount, 48.0, price, fee_rate, fee_exponent)
         self.assertLess(result, amount)
 
-    # --- invariant: adjusted + fees(adjusted) == budget ---
+    # --- invariant: adjusted = balance - reserved_fee ---
 
-    def test_invariant_platform_fee_only(self):
+    def test_platform_fee_only_reserves_original_fee(self):
+        # reserved_fee = fee(amount), adjusted = balance - reserved_fee
         budget, price, fee_rate, fee_exponent = 50, 0.5, 0.25, 2
         result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, fee_rate, fee_exponent), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_builder_fee_only(self):
+    def test_builder_fee_only_reserves_original_fee(self):
         budget, price, builder_rate = 50, 0.5, 0.01
         result = adjust_market_buy_amount(budget, budget, price, 0, 0, builder_rate)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, 0, 0, builder_rate), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, 0, 0, builder_rate) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_combined_fees(self):
+    def test_combined_fees_reserves_original_fee(self):
         budget, price, fee_rate, fee_exponent, builder_rate = 50, 0.5, 0.25, 2, 0.01
         result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent, builder_rate)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, fee_rate, fee_exponent, builder_rate), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent, builder_rate) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_various_prices(self):
+    def test_reserves_original_fee_at_various_prices(self):
         budget, fee_rate, fee_exponent = 50, 0.25, 2
         for price in [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]:
             result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
+            reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
             self.assertAlmostEqual(
-                self._total_cost(result, price, fee_rate, fee_exponent),
-                budget,
+                result,
+                budget - reserved_fee,
                 places=10,
-                msg=f"invariant failed at price={price}",
+                msg=f"fee reservation failed at price={price}",
             )
 
-    def test_invariant_various_budgets(self):
+    def test_reserves_original_fee_at_various_budgets(self):
         price, fee_rate, fee_exponent = 0.5, 0.25, 2
         for budget in [1.0, 10.0, 50.0, 100.0, 1000.0]:
             result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
+            reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
             self.assertAlmostEqual(
-                self._total_cost(result, price, fee_rate, fee_exponent),
-                budget,
+                result,
+                budget - reserved_fee,
                 places=10,
-                msg=f"invariant failed at budget={budget}",
+                msg=f"fee reservation failed at budget={budget}",
             )
 
     # --- edge cases ---

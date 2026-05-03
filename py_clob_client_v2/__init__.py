@@ -1,4 +1,5 @@
 from .client import ClobClient
+from .fees import adjust_buy_amount_for_fees
 from .order_utils import SignatureTypeV2, Side
 from .clob_types import (
     PriceHistoryInterval,
@@ -49,6 +50,8 @@ __all__ = [
     "ClobClient",
     "SignatureTypeV2",
     "Side",
+    # Fee utilities
+    "adjust_buy_amount_for_fees",
     "PriceHistoryInterval",
     # Order input types
     "OrderArgsV1",
