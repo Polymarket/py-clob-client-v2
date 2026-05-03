@@ -39,16 +39,99 @@ def _resolve_user_agent() -> str:
     return os.environ.get("POLY_USER_AGENT", DEFAULT_USER_AGENT)
 
 
+# ---------------------------------------------------------------------------
+# Browser-bundle headers (Phase 2 of UA-bypass — community-fix discovery
+# 2026-05-02 confirmed UA-only is INSUFFICIENT against Cloudflare WAF).
+#
+# Cloudflare's bot-score layer scores on multiple signals: User-Agent,
+# Accept, Accept-Language, Accept-Encoding, sec-ch-ua, sec-fetch-*. A bare
+# UA string + ``Accept: */*`` still trips the heuristic on residential
+# datacenter IPs without a JS challenge. This bundle mirrors a recent
+# Chrome 124 GET so the request looks like a navigator-driven call.
+#
+# Source: scrapfly.io 2026 Cloudflare bypass guide; cross-referenced against
+# IPRoyal's residential-proxy header recipe for the same use case.
+# ---------------------------------------------------------------------------
+_BROWSER_HEADER_BUNDLE = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site",
+}
+
+
 def _overload_headers(method: str, headers: dict) -> dict:
     if headers is None:
         headers = {}
     headers["User-Agent"] = _resolve_user_agent()
-    headers["Accept"] = "*/*"
+    # Browser-bundle defaults — only set when the caller has not already
+    # provided the header (preserves existing test contracts).
+    for key, value in _BROWSER_HEADER_BUNDLE.items():
+        headers.setdefault(key, value)
     headers["Connection"] = "keep-alive"
     headers["Content-Type"] = "application/json"
     if method == GET:
-        headers["Accept-Encoding"] = "gzip"
+        # Match a real browser's compression set (gzip + br + deflate).
+        headers["Accept-Encoding"] = "gzip, deflate, br"
     return headers
+
+
+# ---------------------------------------------------------------------------
+# Residential-proxy support for the auth-only path (Phase 2 of UA-bypass).
+#
+# Community-fix discovery 2026-05-02: UA-only is insufficient because
+# Cloudflare's WAF also checks TLS JA3/JA4 and IP reputation. The only
+# confirmed-working bypass is a residential rotating proxy + the full
+# browser-header bundle above. We expose this through ``POLY_AUTH_PROXY``
+# so operators can route ONLY the L1 ``/auth/api-key`` call through a
+# residential proxy (e.g. IPRoyal, BrightData) while keeping every other
+# call on the direct path — the latency cost is paid once per L2 refresh.
+#
+# The auth client is constructed lazily so the proxy URL is read at first
+# use (not at module import time); operators that toggle the env var at
+# runtime get the new value on the next refresh cycle.
+# ---------------------------------------------------------------------------
+
+
+def get_auth_proxy_url() -> str | None:
+    """Return the residential proxy URL for the L1 ``/auth/api-key`` call.
+
+    Read from ``POLY_AUTH_PROXY`` env var; ``None`` when unset (direct
+    path). Whitespace-only values are treated as unset so an empty .env
+    line does not accidentally enable a broken proxy.
+    """
+    raw = os.environ.get("POLY_AUTH_PROXY", "").strip()
+    return raw or None
+
+
+def build_auth_http_client(timeout_s: float = 30.0) -> "httpx.Client":
+    """Build a per-call httpx.Client for the L1 ``/auth/api-key`` endpoint.
+
+    When ``POLY_AUTH_PROXY`` is set, the resulting client routes through
+    the residential proxy. Otherwise it returns a direct client. Used ONLY
+    for the auth call — all other traffic flows through the long-lived
+    module-level ``_http_client`` to amortise connection setup cost.
+
+    Args:
+        timeout_s: Per-request timeout. Defaults to 30 s (auth derive can
+            take 5-15 s on residential IPs).
+    """
+    proxy_url = get_auth_proxy_url()
+    if proxy_url is None:
+        return httpx.Client(http2=True, timeout=timeout_s)
+    # httpx accepts either a single proxy string (applies to all schemes)
+    # or a per-scheme dict ``{"https://": "..."}``. We default to the dict
+    # form so a residential proxy that only serves HTTPS does not silently
+    # bypass HTTP — the auth endpoint is HTTPS but defense-in-depth.
+    return httpx.Client(
+        http2=True,
+        timeout=timeout_s,
+        proxies={"https://": proxy_url, "http://": proxy_url},
+    )
 
 def _is_transient_error(exc: Exception, status_code: int = None) -> bool:
     """

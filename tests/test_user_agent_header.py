@@ -211,8 +211,13 @@ class TestOverloadHeadersInjectsUA(TestCase):
         self.assertIn("User-Agent", result)
 
     def test_get_includes_accept_encoding(self) -> None:
+        # Phase 2 of UA-bypass: match Chrome's compression set so the WAF
+        # fingerprint stays browser-shaped (community-fix discovery
+        # 2026-05-02). The header must contain "gzip" but is no longer
+        # exactly "gzip".
         result = _overload_headers(GET, None)
-        self.assertEqual(result.get("Accept-Encoding"), "gzip")
+        ae = result.get("Accept-Encoding", "")
+        self.assertIn("gzip", ae)
 
     def test_post_omits_accept_encoding(self) -> None:
         result = _overload_headers(POST, None)
@@ -223,3 +228,77 @@ class TestOverloadHeadersInjectsUA(TestCase):
         with patch.dict(os.environ, {"POLY_USER_AGENT": custom}):
             result = _overload_headers(POST, None)
         self.assertEqual(result["User-Agent"], custom)
+
+
+class TestBrowserHeaderBundle(TestCase):
+    """Phase 2 of UA-bypass — full browser-header bundle on every request."""
+
+    def test_get_includes_sec_ch_ua(self) -> None:
+        result = _overload_headers(GET, None)
+        self.assertIn("sec-ch-ua", result)
+        self.assertIn("Chrome", result["sec-ch-ua"])
+
+    def test_post_includes_sec_fetch_headers(self) -> None:
+        result = _overload_headers(POST, None)
+        self.assertIn("sec-fetch-mode", result)
+        self.assertIn("sec-fetch-site", result)
+        self.assertIn("sec-fetch-dest", result)
+
+    def test_accept_language_is_set(self) -> None:
+        result = _overload_headers(POST, None)
+        self.assertIn("Accept-Language", result)
+        self.assertTrue(result["Accept-Language"].startswith("en"))
+
+    def test_caller_supplied_header_wins(self) -> None:
+        """Operator-supplied Accept overrides the bundle default."""
+        result = _overload_headers(POST, {"Accept": "application/vnd.custom"})
+        self.assertEqual(result["Accept"], "application/vnd.custom")
+
+
+class TestAuthProxySupport(TestCase):
+    """Phase 2 of UA-bypass — POLY_AUTH_PROXY honoured on the auth client."""
+
+    def test_get_auth_proxy_url_unset_returns_none(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("POLY_AUTH_PROXY", None)
+            self.assertIsNone(_helpers.get_auth_proxy_url())
+
+    def test_get_auth_proxy_url_whitespace_returns_none(self) -> None:
+        with patch.dict(os.environ, {"POLY_AUTH_PROXY": "   "}):
+            self.assertIsNone(_helpers.get_auth_proxy_url())
+
+    def test_get_auth_proxy_url_returns_value_when_set(self) -> None:
+        url = "https://user:pass@proxy.example.com:1234"
+        with patch.dict(os.environ, {"POLY_AUTH_PROXY": url}):
+            self.assertEqual(_helpers.get_auth_proxy_url(), url)
+
+    def test_build_auth_http_client_no_proxy_when_unset(self) -> None:
+        """Without POLY_AUTH_PROXY, the auth client is built without proxies."""
+        captured: dict = {}
+
+        def _fake_client(*args, **kwargs):
+            captured.update(kwargs)
+            return _mock.MagicMock()
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("POLY_AUTH_PROXY", None)
+            with _mock.patch.object(_helpers, "httpx", _mock.MagicMock(Client=_fake_client)):
+                _helpers.build_auth_http_client()
+        # No proxies kwarg when env var is unset.
+        self.assertNotIn("proxies", captured)
+
+    def test_build_auth_http_client_uses_proxy_when_set(self) -> None:
+        """POLY_AUTH_PROXY=URL routes the auth call through the proxy."""
+        captured: dict = {}
+
+        def _fake_client(*args, **kwargs):
+            captured.update(kwargs)
+            return _mock.MagicMock()
+
+        url = "https://user:pass@proxy.example.com:1234"
+        with patch.dict(os.environ, {"POLY_AUTH_PROXY": url}):
+            with _mock.patch.object(_helpers, "httpx", _mock.MagicMock(Client=_fake_client)):
+                _helpers.build_auth_http_client()
+        self.assertIn("proxies", captured)
+        self.assertEqual(captured["proxies"].get("https://"), url)
+        self.assertEqual(captured["proxies"].get("http://"), url)
