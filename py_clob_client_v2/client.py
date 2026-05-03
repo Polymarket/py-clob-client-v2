@@ -1,6 +1,6 @@
 import json
 import logging
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace as dataclass_replace
 from typing import Optional
 
 from .clob_types import (
@@ -727,10 +727,11 @@ class ClobClient:
                 f"invalid price ({order_args.price}), min: {ts} - max: {1 - ts}"
             )
 
-        order_args.price = round_normal(order_args.price, ROUNDING_CONFIG[tick_size].price)
+        price = round_normal(order_args.price, ROUNDING_CONFIG[tick_size].price)
 
         version = self.__resolve_version()
 
+        size = order_args.size
         if (
             version == 2
             and (order_args.side == "BUY" or order_args.side == Side.BUY)
@@ -738,12 +739,12 @@ class ClobClient:
         ):
             adjusted = self._adjust_buy_amount_for_balance(
                 token_id,
-                order_args.size * order_args.price,
-                order_args.price,
+                size * price,
+                price,
                 order_args.user_usdc_balance,
                 getattr(order_args, "builder_code", None),
             )
-            order_args.size = adjusted / order_args.price
+            size = adjusted / price
 
         neg_risk = (
             options.neg_risk
@@ -754,8 +755,9 @@ class ClobClient:
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
+        build_args = dataclass_replace(order_args, price=price, size=size)
         return self.builder.build_order(
-            order_args,
+            build_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,
@@ -775,18 +777,19 @@ class ClobClient:
             token_id, options.tick_size if options else None
         )
 
-        if not order_args.price:
-            order_args.price = self.calculate_market_price(
+        price = order_args.price
+        if not price:
+            price = self.calculate_market_price(
                 token_id,
                 order_args.side,
                 order_args.amount,
                 order_args.order_type,
             )
 
-        if not price_valid(order_args.price, tick_size):
+        if not price_valid(price, tick_size):
             ts = float(tick_size)
             raise PolyException(
-                f"invalid price ({order_args.price}), min: {ts} - max: {1 - ts}"
+                f"invalid price ({price}), min: {ts} - max: {1 - ts}"
             )
 
         if self.builder_config and self.builder_config.builder_code:
@@ -795,11 +798,12 @@ class ClobClient:
 
         builder_code = getattr(order_args, "builder_code", BYTES32_ZERO)
 
+        amount = order_args.amount
         if (order_args.side == "BUY" or order_args.side == Side.BUY) and getattr(order_args, "user_usdc_balance", None):
-            order_args.amount = self._adjust_buy_amount_for_balance(
+            amount = self._adjust_buy_amount_for_balance(
                 token_id,
-                order_args.amount,
-                order_args.price,
+                amount,
+                price,
                 order_args.user_usdc_balance,
                 builder_code,
             )
@@ -814,8 +818,9 @@ class ClobClient:
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
+        build_args = dataclass_replace(order_args, price=price, amount=amount)
         return self.builder.build_market_order(
-            order_args,
+            build_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,

@@ -76,9 +76,7 @@ class TestClientOrderFeeAdjustment(unittest.TestCase):
         # takerAmount = 96.25 * 1e6 = 96250000
         self.assertEqual(signed.makerAmount, "48125000")
         self.assertEqual(signed.takerAmount, "96250000")
-        # original object was mutated by price rounding (0.5 → 0.5) and size adjustment
-        # but user_usdc_balance is unchanged
-        self.assertEqual(order.user_usdc_balance, 50)
+        self.assertEqual(order.size, 100)
 
     def test_adjusts_v2_buy_limit_when_price_rounds_up_to_tick(self):
         client = _make_cached_client(fee_slippage=20)
@@ -129,7 +127,7 @@ class TestClientOrderFeeAdjustment(unittest.TestCase):
         # takerAmount = 96.24 * 1e6 = 96240000
         self.assertEqual(signed.makerAmount, "48120000")
         self.assertEqual(signed.takerAmount, "96240000")
-        self.assertEqual(order.amount, 48.125)  # mutated to adjusted amount
+        self.assertEqual(order.amount, 50)
 
     def test_v2_buy_limit_unchanged_without_user_usdc_balance(self):
         client = _make_cached_client(fee_slippage=20)
