@@ -219,6 +219,18 @@ class TestOverloadHeadersInjectsUA(TestCase):
         ae = result.get("Accept-Encoding", "")
         self.assertIn("gzip", ae)
 
+    def test_get_does_not_advertise_brotli_without_dep(self) -> None:
+        # Cursor Bugbot (PR #42, commit ba44d13): advertising Brotli when
+        # neither ``brotli`` nor ``brotlicffi`` is in install_requires
+        # makes httpx fail to decode any ``Content-Encoding: br`` reply
+        # from Cloudflare. Since brotli is NOT a declared dependency of
+        # py-clob-client-v2, the Accept-Encoding header MUST omit "br".
+        result = _overload_headers(GET, None)
+        ae = result.get("Accept-Encoding", "")
+        self.assertNotIn("br", ae.split(","), f"Accept-Encoding leaks 'br' without brotli dep: {ae!r}")
+        # Sanity: deflate is fine because httpx ships built-in support.
+        self.assertIn("deflate", ae)
+
     def test_post_omits_accept_encoding(self) -> None:
         result = _overload_headers(POST, None)
         self.assertNotIn("Accept-Encoding", result)
@@ -273,7 +285,7 @@ class TestAuthProxySupport(TestCase):
             self.assertEqual(_helpers.get_auth_proxy_url(), url)
 
     def test_build_auth_http_client_no_proxy_when_unset(self) -> None:
-        """Without POLY_AUTH_PROXY, the auth client is built without proxies."""
+        """Without POLY_AUTH_PROXY, the auth client is built without proxy kwarg."""
         captured: dict = {}
 
         def _fake_client(*args, **kwargs):
@@ -284,11 +296,18 @@ class TestAuthProxySupport(TestCase):
             os.environ.pop("POLY_AUTH_PROXY", None)
             with _mock.patch.object(_helpers, "httpx", _mock.MagicMock(Client=_fake_client)):
                 _helpers.build_auth_http_client()
-        # No proxies kwarg when env var is unset.
+        # No proxy kwarg when env var is unset (httpx 0.28+ uses ``proxy=``,
+        # not the removed ``proxies={...}`` dict).
+        self.assertNotIn("proxy", captured)
         self.assertNotIn("proxies", captured)
 
     def test_build_auth_http_client_uses_proxy_when_set(self) -> None:
-        """POLY_AUTH_PROXY=URL routes the auth call through the proxy."""
+        """POLY_AUTH_PROXY=URL routes the auth call through the proxy.
+
+        Cursor Bugbot (PR #42, commit ba44d13): the original
+        ``proxies={"https://": ..., "http://": ...}`` form was removed in
+        httpx 0.28. The replacement is ``proxy=<single url>``.
+        """
         captured: dict = {}
 
         def _fake_client(*args, **kwargs):
@@ -299,6 +318,96 @@ class TestAuthProxySupport(TestCase):
         with patch.dict(os.environ, {"POLY_AUTH_PROXY": url}):
             with _mock.patch.object(_helpers, "httpx", _mock.MagicMock(Client=_fake_client)):
                 _helpers.build_auth_http_client()
-        self.assertIn("proxies", captured)
-        self.assertEqual(captured["proxies"].get("https://"), url)
-        self.assertEqual(captured["proxies"].get("http://"), url)
+        # Forward-compatible with httpx >=0.28 (``proxy=``); the removed
+        # ``proxies=`` kwarg must NOT be present.
+        self.assertIn("proxy", captured)
+        self.assertEqual(captured["proxy"], url)
+        self.assertNotIn("proxies", captured)
+
+
+class TestAuthRequestRoutesThroughProxy(TestCase):
+    """auth_post / auth_get actually invoke build_auth_http_client.
+
+    Cursor Bugbot (PR #42, commit ba44d13) flagged that
+    ``build_auth_http_client`` was defined but never called from the
+    auth path, leaving Layer 3 (residential proxy) entirely dead. These
+    tests pin the wiring so a future refactor can't silently bypass it.
+    """
+
+    def test_auth_post_uses_build_auth_http_client(self) -> None:
+        fake_resp = _mock.MagicMock(status_code=200)
+        fake_resp.json.return_value = {"ok": True}
+        fake_client = _mock.MagicMock()
+        fake_client.__enter__ = lambda self: fake_client
+        fake_client.__exit__ = lambda self, *a: None
+        fake_client.request.return_value = fake_resp
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", return_value=fake_client) as builder:
+            _helpers.auth_post("https://example.com/auth/api-key", headers={})
+
+        builder.assert_called_once()
+        fake_client.request.assert_called_once()
+        # Method routed through must be POST.
+        call_kwargs = fake_client.request.call_args.kwargs
+        self.assertEqual(call_kwargs["method"], "POST")
+
+    def test_auth_get_uses_build_auth_http_client(self) -> None:
+        fake_resp = _mock.MagicMock(status_code=200)
+        fake_resp.json.return_value = {"ok": True}
+        fake_client = _mock.MagicMock()
+        fake_client.__enter__ = lambda self: fake_client
+        fake_client.__exit__ = lambda self, *a: None
+        fake_client.request.return_value = fake_resp
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", return_value=fake_client) as builder:
+            _helpers.auth_get("https://example.com/auth/derive-api-key", headers={})
+
+        builder.assert_called_once()
+        call_kwargs = fake_client.request.call_args.kwargs
+        self.assertEqual(call_kwargs["method"], "GET")
+
+    def test_auth_request_injects_browser_headers(self) -> None:
+        """auth_request still flows through _overload_headers (UA + bundle)."""
+        fake_resp = _mock.MagicMock(status_code=200)
+        fake_resp.json.return_value = {}
+        fake_client = _mock.MagicMock()
+        fake_client.__enter__ = lambda self: fake_client
+        fake_client.__exit__ = lambda self, *a: None
+        fake_client.request.return_value = fake_resp
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", return_value=fake_client):
+            _helpers.auth_post("https://example.com/x", headers={})
+
+        sent_headers = fake_client.request.call_args.kwargs["headers"]
+        self.assertIn("User-Agent", sent_headers)
+        self.assertTrue(sent_headers["User-Agent"].startswith(UA_PREFIX))
+        self.assertIn("sec-ch-ua", sent_headers)
+
+
+class TestPython39Compat(TestCase):
+    """Module imports cleanly on Python 3.9 (PEP 604 union syntax safety).
+
+    Cursor Bugbot (PR #42, commit ba44d13): ``str | None`` runtime union
+    syntax is Python 3.10+. The project declares
+    ``python_requires=">=3.9.10"``. Guard via ``from __future__ import
+    annotations`` (or ``Optional[str]``). Both must be in place.
+    """
+
+    def test_helpers_module_has_future_annotations(self) -> None:
+        src = (_PKG_DIR / "http_helpers" / "helpers.py").read_text()
+        self.assertIn(
+            "from __future__ import annotations",
+            src,
+            "helpers.py MUST import `from __future__ import annotations` "
+            "to keep PEP 604 syntax safe on Python 3.9",
+        )
+
+    def test_get_auth_proxy_url_annotation_uses_optional(self) -> None:
+        # Belt-and-braces: also use `Optional[str]` so the annotation is
+        # safe even if the future import is later removed.
+        src = (_PKG_DIR / "http_helpers" / "helpers.py").read_text()
+        self.assertIn(
+            "def get_auth_proxy_url() -> Optional[str]:",
+            src,
+            "get_auth_proxy_url() MUST use Optional[str] for Python 3.9 safety",
+        )

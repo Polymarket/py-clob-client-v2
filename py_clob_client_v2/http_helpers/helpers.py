@@ -1,6 +1,15 @@
+# `from __future__ import annotations` is REQUIRED here because the project
+# declares ``python_requires=">=3.9.10"`` in setup.py and we use PEP 604
+# union syntax (e.g. ``str | None``) on the auth-proxy helpers below. Without
+# this import the module raises ``TypeError: unsupported operand type(s) for
+# |: 'type' and 'NoneType'`` at import time on Python 3.9, taking the entire
+# SDK down with it. Found by Cursor Bugbot on PR #42 (commit ba44d13).
+from __future__ import annotations
+
 import logging
 import os
 import time
+from typing import Optional
 
 import httpx
 
@@ -75,8 +84,15 @@ def _overload_headers(method: str, headers: dict) -> dict:
     headers["Connection"] = "keep-alive"
     headers["Content-Type"] = "application/json"
     if method == GET:
-        # Match a real browser's compression set (gzip + br + deflate).
-        headers["Accept-Encoding"] = "gzip, deflate, br"
+        # Advertise ONLY codecs httpx can decode out of the box. Brotli
+        # (``br``) is intentionally omitted because the ``brotli`` /
+        # ``brotlicffi`` packages are not in install_requires — advertising
+        # ``br`` would let Cloudflare answer with ``Content-Encoding: br``
+        # and httpx would fail to decode the response body. ``gzip`` +
+        # ``deflate`` is sufficient to look like a modern client without
+        # introducing a new mandatory dependency. Found by Cursor Bugbot on
+        # PR #42 (commit ba44d13).
+        headers["Accept-Encoding"] = "gzip, deflate"
     return headers
 
 
@@ -97,24 +113,38 @@ def _overload_headers(method: str, headers: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def get_auth_proxy_url() -> str | None:
+def get_auth_proxy_url() -> Optional[str]:
     """Return the residential proxy URL for the L1 ``/auth/api-key`` call.
 
     Read from ``POLY_AUTH_PROXY`` env var; ``None`` when unset (direct
     path). Whitespace-only values are treated as unset so an empty .env
     line does not accidentally enable a broken proxy.
+
+    Type annotation uses ``Optional[str]`` (not ``str | None``) so the
+    module imports cleanly on Python 3.9 even if ``from __future__ import
+    annotations`` is removed by a future maintainer.
     """
     raw = os.environ.get("POLY_AUTH_PROXY", "").strip()
     return raw or None
 
 
-def build_auth_http_client(timeout_s: float = 30.0) -> "httpx.Client":
+def build_auth_http_client(timeout_s: float = 30.0) -> httpx.Client:
     """Build a per-call httpx.Client for the L1 ``/auth/api-key`` endpoint.
 
     When ``POLY_AUTH_PROXY`` is set, the resulting client routes through
     the residential proxy. Otherwise it returns a direct client. Used ONLY
-    for the auth call — all other traffic flows through the long-lived
-    module-level ``_http_client`` to amortise connection setup cost.
+    for the auth call (``create_api_key`` / ``derive_api_key`` via
+    ``client._l1_post`` / ``client._l1_get``) — all other traffic flows
+    through the long-lived module-level ``_http_client`` to amortise
+    connection setup cost.
+
+    httpx 0.28 removed the ``proxies={"https://": url, "http://": url}``
+    kwarg. The replacement APIs are ``proxy=<single url>`` or
+    ``mounts={scheme: HTTPTransport(proxy=...)}`` for per-scheme routing.
+    We use the single-URL form because both schemes route to the same
+    residential proxy — this is forward-compatible with httpx >=0.28
+    and back-compatible with httpx >=0.27. Found by Cursor Bugbot on
+    PR #42 (commit ba44d13).
 
     Args:
         timeout_s: Per-request timeout. Defaults to 30 s (auth derive can
@@ -123,15 +153,81 @@ def build_auth_http_client(timeout_s: float = 30.0) -> "httpx.Client":
     proxy_url = get_auth_proxy_url()
     if proxy_url is None:
         return httpx.Client(http2=True, timeout=timeout_s)
-    # httpx accepts either a single proxy string (applies to all schemes)
-    # or a per-scheme dict ``{"https://": "..."}``. We default to the dict
-    # form so a residential proxy that only serves HTTPS does not silently
-    # bypass HTTP — the auth endpoint is HTTPS but defense-in-depth.
     return httpx.Client(
         http2=True,
         timeout=timeout_s,
-        proxies={"https://": proxy_url, "http://": proxy_url},
+        proxy=proxy_url,
     )
+
+def auth_request(endpoint: str, method: str, headers=None, data=None, params=None):
+    """L1-auth-only request path that honours ``POLY_AUTH_PROXY``.
+
+    Identical surface to ``request()`` (same headers, same JSON encoding,
+    same exception contract) but constructs a per-call ``httpx.Client``
+    via ``build_auth_http_client()`` so the residential proxy actually
+    gets used. Without this wiring, ``build_auth_http_client`` would be
+    dead code and the proxy env var would have no effect — the four bug
+    fixes on PR #42 require all three layers (UA + browser headers +
+    proxy) to flow through the SAME request, and the L1 auth call is the
+    one Cloudflare blocks.
+
+    Closed as a context manager so the per-call client is disposed
+    immediately after the auth call returns. The auth round-trip is rare
+    (≤1× per L2 cache refresh, ≈1× per 25 min in production) so we do
+    not amortise the connect cost — correctness > throughput here.
+
+    Found by Cursor Bugbot on PR #42 (commit ba44d13): ``build_auth_
+    http_client`` was defined but never invoked, leaving Layer 3 of the
+    bypass non-functional.
+    """
+    headers = _overload_headers(method, headers)
+    try:
+        with build_auth_http_client() as client:
+            if isinstance(data, str):
+                resp = client.request(
+                    method=method,
+                    url=endpoint,
+                    headers=headers,
+                    content=data.encode("utf-8"),
+                    params=params,
+                )
+            else:
+                resp = client.request(
+                    method=method,
+                    url=endpoint,
+                    headers=headers,
+                    json=data,
+                    params=params,
+                )
+
+        if resp.status_code != 200:
+            logger.error(
+                "[py_clob_client_v2] auth request error status=%s url=%s body=%s",
+                resp.status_code,
+                endpoint,
+                resp.text,
+            )
+            raise PolyApiException(resp)
+
+        try:
+            return resp.json()
+        except ValueError:
+            return resp.text
+
+    except PolyApiException:
+        raise
+    except httpx.RequestError as exc:
+        logger.error("[py_clob_client_v2] auth request error: %s", exc)
+        raise PolyApiException(error_msg="Auth request exception!")
+
+
+def auth_get(endpoint, headers=None, data=None, params=None):
+    return auth_request(endpoint, GET, headers, data, params)
+
+
+def auth_post(endpoint, headers=None, data=None, params=None):
+    return auth_request(endpoint, POST, headers, data, params)
+
 
 def _is_transient_error(exc: Exception, status_code: int = None) -> bool:
     """
