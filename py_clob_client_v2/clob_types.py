@@ -96,6 +96,10 @@ class OrderArgsV2:
     metadata: str = BYTES32_ZERO
     """Optional metadata (bytes32) attached to the order"""
 
+    user_usdc_balance: Optional[float] = None
+    """User's collateral balance. If provided and insufficient to cover size*price + fees, the order
+    size is reduced"""
+
 
 # Alias: default to V2
 OrderArgs = OrderArgsV2
