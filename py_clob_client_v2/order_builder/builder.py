@@ -1,5 +1,5 @@
 import time
-from typing import Union
+from typing import Optional, Union
 
 from .helpers import (
     to_token_decimals,
@@ -44,8 +44,8 @@ class OrderBuilder:
     def __init__(
         self,
         signer: Signer,
-        signature_type: SignatureTypeV2 = None,
-        funder: str = None,
+        signature_type: Optional[SignatureTypeV2] = None,
+        funder: Optional[str] = None,
     ):
         self.signer = signer
 
@@ -131,7 +131,7 @@ class OrderBuilder:
         order_args: Union[OrderArgsV1, OrderArgsV2],
         options: CreateOrderOptions,
         version: int = 2,
-        fee_rate_bps: int = None,
+        fee_rate_bps: Optional[int] = None,
     ) -> Union[SignedOrderV1, SignedOrderV2]:
         """
         Creates and signs a limit order.
@@ -212,7 +212,7 @@ class OrderBuilder:
         order_args: Union[MarketOrderArgsV1, MarketOrderArgsV2],
         options: CreateOrderOptions,
         version: int = 2,
-        fee_rate_bps: int = None,
+        fee_rate_bps: Optional[int] = None,
     ) -> Union[SignedOrderV1, SignedOrderV2]:
         """
         Creates and signs a market order.

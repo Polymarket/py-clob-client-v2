@@ -166,19 +166,19 @@ MarketOrderArgs = MarketOrderArgsV2
 
 @dataclass
 class TradeParams:
-    id: str = None
-    maker_address: str = None
-    market: str = None
-    asset_id: str = None
-    before: int = None
-    after: int = None
+    id: Optional[str] = None
+    maker_address: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    before: Optional[int] = None
+    after: Optional[int] = None
 
 
 @dataclass
 class OpenOrderParams:
-    id: str = None
-    market: str = None
-    asset_id: str = None
+    id: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
 
 
 @dataclass
@@ -188,8 +188,8 @@ class DropNotificationParams:
 
 @dataclass
 class OrderSummary:
-    price: str = None
-    size: str = None
+    price: Optional[str] = None
+    size: Optional[str] = None
 
     @property
     def __dict__(self):
@@ -202,16 +202,16 @@ class OrderSummary:
 
 @dataclass
 class OrderBookSummary:
-    market: str = None
-    asset_id: str = None
-    timestamp: str = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    timestamp: Optional[str] = None
     bids: Optional[list] = None
     asks: Optional[list] = None
-    min_order_size: str = None
-    neg_risk: bool = None
-    tick_size: str = None
-    last_trade_price: str = None
-    hash: str = None
+    min_order_size: Optional[str] = None
+    neg_risk: Optional[bool] = None
+    tick_size: Optional[str] = None
+    last_trade_price: Optional[str] = None
+    hash: Optional[str] = None
 
     @property
     def __dict__(self):
@@ -230,7 +230,7 @@ class AssetType:
 @dataclass
 class BalanceAllowanceParams:
     asset_type: AssetType = None
-    token_id: str = None
+    token_id: Optional[str] = None
     signature_type: int = -1
 
 
@@ -312,11 +312,34 @@ class BuilderConfig:
 class FeeDetails:
     """Platform fee details for a market"""
 
-    fee_rate: int = 0
-    """Fee rate in basis points"""
+    fee_rate: float = 0.0
+    """Fee rate (e.g. 0.05 for 5%)"""
 
     exponent: int = 0
-    """Fee exponent for the platform fee formula"""
+    """Fee exponent (integer, e.g. 1 or 2)"""
+
+    taker_only: bool = False
+    """If True, fee applies to takers only; always present when fd is present"""
+
+
+@dataclass
+class ClobRewards:
+    """Rewards configuration for a market"""
+
+    min_size: Optional[float] = None
+    """Minimum order size for rewards eligibility"""
+
+    max_spread: Optional[float] = None
+    """Maximum spread for rewards eligibility"""
+
+    enabled: Optional[bool] = None
+    """Whether rewards are enabled"""
+
+    skip_min_order_age: Optional[bool] = None
+    """Whether to skip minimum order age check"""
+
+    min_order_age_seconds: Optional[int] = None
+    """Minimum order age in seconds"""
 
 
 @dataclass
@@ -349,20 +372,50 @@ class MarketDetails:
     tokens: Tuple = None
     """(YES token, NO token)"""
 
-    min_tick_size: float = None
+    min_tick_size: Optional[float] = None
     """Minimum tick size"""
 
-    neg_risk: bool = False
-    """Whether the market uses negative risk"""
+    neg_risk: Optional[bool] = None
+    """Whether the market uses negative risk (omitted from API when False)"""
 
     fee_details: Optional[FeeDetails] = None
     """Platform fee details"""
 
-    maker_base_fee: Optional[float] = None
-    """V1 maker base fee rate (from mbf field)"""
+    maker_base_fee: Optional[int] = None
+    """Maker base fee in bps (from mbf field, e.g. 1000 = 10%)"""
 
-    taker_base_fee: Optional[float] = None
-    """V1 taker base fee rate (from tbf field)"""
+    taker_base_fee: Optional[int] = None
+    """Taker base fee in bps (from tbf field, e.g. 1000 = 10%)"""
+
+    rewards: Optional[ClobRewards] = None
+    """Rewards configuration (null if unset)"""
+
+    accepting_orders: Optional[bool] = None
+    """Whether the market is currently accepting orders"""
+
+    min_order_size: Optional[float] = None
+    """Minimum order size"""
+
+    seconds_delay: Optional[int] = None
+    """Seconds delay"""
+
+    game_start_time: Optional[str] = None
+    """Game start time (ISO 8601)"""
+
+    clear_book_on_start: Optional[bool] = None
+    """Whether to clear the book on game start"""
+
+    accepting_orders_timestamp: Optional[str] = None
+    """Timestamp when the market started accepting orders (ISO 8601)"""
+
+    rfq_enabled: Optional[bool] = None
+    """Whether RFQ is enabled"""
+
+    taker_order_delay_enabled: Optional[bool] = None
+    """Whether taker order delay is enabled"""
+
+    blockaid_check_enabled: Optional[bool] = None
+    """Whether Blockaid check is enabled"""
 
 
 @dataclass
@@ -396,18 +449,18 @@ class OrderScoring:
 @dataclass
 class BuilderTradeParams:
     builder_code: str
-    id: str = None
-    maker_address: str = None
-    market: str = None
-    asset_id: str = None
-    before: str = None
-    after: str = None
+    id: Optional[str] = None
+    maker_address: Optional[str] = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
+    before: Optional[str] = None
+    after: Optional[str] = None
 
 
 @dataclass
 class OrderMarketCancelParams:
-    market: str = None
-    asset_id: str = None
+    market: Optional[str] = None
+    asset_id: Optional[str] = None
 
 
 @dataclass
@@ -434,22 +487,22 @@ class PriceHistoryInterval:
 
 @dataclass
 class PricesHistoryParams:
-    market: str = None
-    start_ts: int = None
-    end_ts: int = None
-    fidelity: int = None
-    interval: str = None
+    market: Optional[str] = None
+    start_ts: Optional[int] = None
+    end_ts: Optional[int] = None
+    fidelity: Optional[int] = None
+    interval: Optional[str] = None
 
 
 @dataclass
 class EarningsParams:
-    date: str = None
+    date: Optional[str] = None
     """Date in YYYY-MM-DD format"""
 
-    market: str = None
+    market: Optional[str] = None
 
 
 @dataclass
 class RewardsMarketsParams:
-    condition_id: str = None
-    next_cursor: str = None
+    condition_id: Optional[str] = None
+    next_cursor: Optional[str] = None
