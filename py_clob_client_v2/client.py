@@ -107,6 +107,8 @@ from .endpoints import (
 from .exceptions import PolyException
 from .headers.headers import create_level_1_headers, create_level_2_headers
 from .http_helpers.helpers import (
+    auth_get,
+    auth_post,
     delete,
     get,
     parse_drop_notification_params,
@@ -484,8 +486,24 @@ class ClobClient:
         return results
 
     def create_api_key(self, nonce: int = None) -> ApiCreds:
+        # The L1 ``/auth/api-key`` endpoint is the ONLY surface that
+        # Cloudflare's WAF currently 403's against direct datacenter IPs
+        # (issues #38 / #41 / #43). Route this single call through
+        # ``auth_post`` which honours ``POLY_AUTH_PROXY`` (residential
+        # proxy) and applies the full browser-header bundle. Every other
+        # call still flows through the long-lived module-level client.
+        #
+        # ``retry_on_error`` is forwarded from the client constructor so
+        # callers that opted in via ``ClobClient(retry_on_error=True)``
+        # still get a single transient-error retry on the auth path —
+        # parity with the pre-31134da behavior of ``self._post()``.
+        # Cursor Bugbot flagged the missing forward on commit 31134da.
         headers = self._l1_headers(nonce=nonce)
-        resp = self._post(f"{self.host}{CREATE_API_KEY}", headers=headers)
+        resp = auth_post(
+            f"{self.host}{CREATE_API_KEY}",
+            headers=headers,
+            retry_on_error=self.retry_on_error,
+        )
         return ApiCreds(
             api_key=resp["apiKey"],
             api_secret=resp["secret"],
@@ -493,8 +511,17 @@ class ClobClient:
         )
 
     def derive_api_key(self, nonce: int = None) -> ApiCreds:
+        # Same Cloudflare-bypass routing as ``create_api_key`` — the L1
+        # auth GET is the second 403 hotspot (issue #38). All non-auth
+        # GETs continue to use the shared client. ``retry_on_error``
+        # forwarded for parity with the pre-31134da ``self._get()`` path
+        # (Cursor Bugbot finding on commit 31134da).
         headers = self._l1_headers(nonce=nonce)
-        resp = self._get(f"{self.host}{DERIVE_API_KEY}", headers=headers)
+        resp = auth_get(
+            f"{self.host}{DERIVE_API_KEY}",
+            headers=headers,
+            retry_on_error=self.retry_on_error,
+        )
         return ApiCreds(
             api_key=resp["apiKey"],
             api_secret=resp["secret"],
