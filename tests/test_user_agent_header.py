@@ -384,6 +384,128 @@ class TestAuthRequestRoutesThroughProxy(TestCase):
         self.assertIn("sec-ch-ua", sent_headers)
 
 
+class TestAuthRetryOnErrorParity(TestCase):
+    """auth_post / auth_get honour ``retry_on_error`` like ``post``/``get``.
+
+    Cursor Bugbot (PR #42, commit 31134da) flagged that the new
+    ``auth_post`` silently dropped the single-retry-on-transient
+    semantic that the pre-31134da ``self._post()`` path forwarded from
+    ``ClobClient.retry_on_error``. These tests pin the restored
+    behaviour so a future refactor can't drop it again.
+    """
+
+    def _build_fake_client_returning(self, responses):
+        """Yield each response in sequence; raise StopIteration after."""
+        responses_iter = iter(responses)
+
+        def _build():
+            client = _mock.MagicMock()
+            client.__enter__ = lambda self: client
+            client.__exit__ = lambda self, *a: None
+
+            def _do_request(*args, **kwargs):
+                resp = next(responses_iter)
+                if isinstance(resp, Exception):
+                    raise resp
+                return resp
+
+            client.request.side_effect = _do_request
+            return client
+
+        return _build
+
+    def test_auth_post_retries_on_500_when_retry_on_error_true(self) -> None:
+        bad_resp = _mock.MagicMock(status_code=503, text="upstream down")
+        good_resp = _mock.MagicMock(status_code=200)
+        good_resp.json.return_value = {"ok": True}
+
+        builds = [bad_resp, good_resp]
+        idx = {"i": 0}
+
+        def _build():
+            client = _mock.MagicMock()
+            client.__enter__ = lambda self: client
+            client.__exit__ = lambda self, *a: None
+            client.request.return_value = builds[idx["i"]]
+            idx["i"] += 1
+            return client
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", side_effect=_build):
+            with _mock.patch.object(_helpers.time, "sleep"):
+                result = _helpers.auth_post(
+                    "https://example.com/auth/api-key",
+                    headers={},
+                    retry_on_error=True,
+                )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(idx["i"], 2, "expected exactly 2 attempts (1 retry)")
+
+    def test_auth_post_does_not_retry_when_retry_on_error_false(self) -> None:
+        bad_resp = _mock.MagicMock(status_code=503, text="upstream down")
+        idx = {"i": 0}
+
+        def _build():
+            client = _mock.MagicMock()
+            client.__enter__ = lambda self: client
+            client.__exit__ = lambda self, *a: None
+            client.request.return_value = bad_resp
+            idx["i"] += 1
+            return client
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", side_effect=_build):
+            with self.assertRaises(_helpers.PolyApiException):
+                _helpers.auth_post(
+                    "https://example.com/auth/api-key",
+                    headers={},
+                    retry_on_error=False,
+                )
+
+        self.assertEqual(idx["i"], 1, "must NOT retry when retry_on_error=False")
+
+    def test_auth_post_does_not_retry_on_400(self) -> None:
+        """4xx is non-transient — must surface immediately even with retry_on_error=True."""
+        bad_resp = _mock.MagicMock(status_code=401, text="Invalid api key")
+        idx = {"i": 0}
+
+        def _build():
+            client = _mock.MagicMock()
+            client.__enter__ = lambda self: client
+            client.__exit__ = lambda self, *a: None
+            client.request.return_value = bad_resp
+            idx["i"] += 1
+            return client
+
+        with _mock.patch.object(_helpers, "build_auth_http_client", side_effect=_build):
+            with self.assertRaises(_helpers.PolyApiException):
+                _helpers.auth_post(
+                    "https://example.com/auth/api-key",
+                    headers={},
+                    retry_on_error=True,
+                )
+
+        self.assertEqual(
+            idx["i"], 1,
+            "401/400 are non-transient — retry_on_error must NOT trigger",
+        )
+
+    def test_auth_get_forwards_retry_on_error_kwarg(self) -> None:
+        """auth_get accepts and forwards retry_on_error to auth_request."""
+        captured = {"retry": None}
+
+        original = _helpers.auth_request
+
+        def _spy(*args, **kwargs):
+            captured["retry"] = kwargs.get("retry_on_error")
+            # Short-circuit; we only care about the forward.
+            return {"ok": True}
+
+        with _mock.patch.object(_helpers, "auth_request", side_effect=_spy):
+            _helpers.auth_get("https://example.com/x", headers={}, retry_on_error=True)
+
+        self.assertIs(captured["retry"], True)
+
+
 class TestPython39Compat(TestCase):
     """Module imports cleanly on Python 3.9 (PEP 604 union syntax safety).
 

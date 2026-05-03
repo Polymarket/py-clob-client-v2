@@ -159,7 +159,55 @@ def build_auth_http_client(timeout_s: float = 30.0) -> httpx.Client:
         proxy=proxy_url,
     )
 
-def auth_request(endpoint: str, method: str, headers=None, data=None, params=None):
+def _auth_request_attempt(endpoint: str, method: str, headers, data, params):
+    """Single auth-call attempt. Raises on non-200 or network error.
+
+    Body of ``auth_request`` extracted so the retry wrapper can call it
+    twice without duplicating the proxy-aware client construction. Each
+    attempt builds a fresh ``httpx.Client`` so a transient connection
+    leak in the proxy can't poison the retry.
+    """
+    with build_auth_http_client() as client:
+        if isinstance(data, str):
+            resp = client.request(
+                method=method,
+                url=endpoint,
+                headers=headers,
+                content=data.encode("utf-8"),
+                params=params,
+            )
+        else:
+            resp = client.request(
+                method=method,
+                url=endpoint,
+                headers=headers,
+                json=data,
+                params=params,
+            )
+
+    if resp.status_code != 200:
+        logger.error(
+            "[py_clob_client_v2] auth request error status=%s url=%s body=%s",
+            resp.status_code,
+            endpoint,
+            resp.text,
+        )
+        raise PolyApiException(resp)
+
+    try:
+        return resp.json()
+    except ValueError:
+        return resp.text
+
+
+def auth_request(
+    endpoint: str,
+    method: str,
+    headers=None,
+    data=None,
+    params=None,
+    retry_on_error: bool = False,
+):
     """L1-auth-only request path that honours ``POLY_AUTH_PROXY``.
 
     Identical surface to ``request()`` (same headers, same JSON encoding,
@@ -176,57 +224,51 @@ def auth_request(endpoint: str, method: str, headers=None, data=None, params=Non
     (≤1× per L2 cache refresh, ≈1× per 25 min in production) so we do
     not amortise the connect cost — correctness > throughput here.
 
-    Found by Cursor Bugbot on PR #42 (commit ba44d13): ``build_auth_
-    http_client`` was defined but never invoked, leaving Layer 3 of the
-    bypass non-functional.
+    ``retry_on_error`` mirrors the same flag on ``post()``: when True,
+    a single transient-error retry (5xx response or network-level
+    ``httpx.ConnectError`` / ``TimeoutException`` / ``NetworkError``) is
+    attempted after a 30 ms back-off. Cursor Bugbot flagged on commit
+    ``31134da`` that the original auth path went through ``self._post()``
+    which forwarded ``self.retry_on_error`` to ``post()``, but the new
+    ``auth_post()`` had silently dropped that semantic — restored here.
+
+    Found by Cursor Bugbot on PR #42:
+      - commit ba44d13: ``build_auth_http_client`` was defined but never
+        invoked, leaving Layer 3 of the bypass non-functional.
+      - commit 31134da: ``auth_post`` lost ``retry_on_error`` parity
+        with the previous ``self._post()`` path.
     """
     headers = _overload_headers(method, headers)
     try:
-        with build_auth_http_client() as client:
-            if isinstance(data, str):
-                resp = client.request(
-                    method=method,
-                    url=endpoint,
-                    headers=headers,
-                    content=data.encode("utf-8"),
-                    params=params,
-                )
-            else:
-                resp = client.request(
-                    method=method,
-                    url=endpoint,
-                    headers=headers,
-                    json=data,
-                    params=params,
-                )
-
-        if resp.status_code != 200:
-            logger.error(
-                "[py_clob_client_v2] auth request error status=%s url=%s body=%s",
-                resp.status_code,
-                endpoint,
-                resp.text,
+        return _auth_request_attempt(endpoint, method, headers, data, params)
+    except (PolyApiException, httpx.RequestError) as exc:
+        status = getattr(exc, "status_code", None)
+        if retry_on_error and _is_transient_error(exc, status):
+            logger.info(
+                "[py_clob_client_v2] auth transient error, retrying once after 30 ms"
             )
-            raise PolyApiException(resp)
-
-        try:
-            return resp.json()
-        except ValueError:
-            return resp.text
-
-    except PolyApiException:
-        raise
-    except httpx.RequestError as exc:
+            time.sleep(0.03)
+            try:
+                return _auth_request_attempt(
+                    endpoint, method, headers, data, params
+                )
+            except httpx.RequestError as retry_exc:
+                logger.error(
+                    "[py_clob_client_v2] auth retry failed: %s", retry_exc
+                )
+                raise PolyApiException(error_msg="Auth request exception!")
+        if isinstance(exc, PolyApiException):
+            raise
         logger.error("[py_clob_client_v2] auth request error: %s", exc)
         raise PolyApiException(error_msg="Auth request exception!")
 
 
-def auth_get(endpoint, headers=None, data=None, params=None):
-    return auth_request(endpoint, GET, headers, data, params)
+def auth_get(endpoint, headers=None, data=None, params=None, retry_on_error: bool = False):
+    return auth_request(endpoint, GET, headers, data, params, retry_on_error=retry_on_error)
 
 
-def auth_post(endpoint, headers=None, data=None, params=None):
-    return auth_request(endpoint, POST, headers, data, params)
+def auth_post(endpoint, headers=None, data=None, params=None, retry_on_error: bool = False):
+    return auth_request(endpoint, POST, headers, data, params, retry_on_error=retry_on_error)
 
 
 def _is_transient_error(exc: Exception, status_code: int = None) -> bool:
