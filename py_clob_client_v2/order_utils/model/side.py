@@ -1,4 +1,4 @@
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 
 class Side(IntEnum):
@@ -6,6 +6,6 @@ class Side(IntEnum):
     SELL = 1
 
 
-class SideString:
+class SideString(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
