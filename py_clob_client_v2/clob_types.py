@@ -58,8 +58,10 @@ class OrderArgsV1:
     expiration: int = 0
     """Timestamp after which the order is expired"""
 
-    fee_rate_bps: int = 0
-    """Fee rate in basis points charged to the order maker"""
+    fee_rate_bps: Optional[int] = None
+    """Fee rate in basis points charged to the order maker. None = use the
+    market's configured fee rate. 0 explicitly requests a zero fee rate and
+    will error if it disagrees with the market."""
 
     nonce: int = 0
     """Nonce used for onchain cancellations"""
@@ -119,8 +121,10 @@ class MarketOrderArgsV1:
 
     order_type: OrderType = OrderType.FOK
 
-    fee_rate_bps: int = 0
-    """Fee rate in basis points charged to the order maker"""
+    fee_rate_bps: Optional[int] = None
+    """Fee rate in basis points charged to the order maker. None = use the
+    market's configured fee rate. 0 explicitly requests a zero fee rate and
+    will error if it disagrees with the market."""
 
     nonce: int = 0
     """Nonce used for onchain cancellations"""
