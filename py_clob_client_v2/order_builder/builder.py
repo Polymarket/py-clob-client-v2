@@ -40,6 +40,14 @@ ROUNDING_CONFIG: dict = {
     "0.0001": RoundConfig(price=4, size=2, amount=6),
 }
 
+
+def _normalize_positions(positions: list):
+    """Yield (size, price) float pairs, accepting dicts or OrderSummary-like objects."""
+    for p in positions:
+        size = p["size"] if isinstance(p, dict) else p.size
+        price = p["price"] if isinstance(p, dict) else p.price
+        yield float(size), float(price)
+
 class OrderBuilder:
     def __init__(
         self,
@@ -296,19 +304,22 @@ class OrderBuilder:
         if not positions:
             raise Exception("no match")
 
-        total = 0
-        for p in reversed(positions):
-            size = p["size"] if isinstance(p, dict) else p.size
-            price = p["price"] if isinstance(p, dict) else p.price
-            total += float(size) * float(price)
+        # Walk asks from cheapest to most expensive so the returned price is
+        # the marginal price required to fill `amount_to_match`. Sort locally
+        # to avoid depending on the server's (undocumented) ordering.
+        walk = sorted(_normalize_positions(positions), key=lambda x: x[1])
+
+        total = 0.0
+        for size, price in walk:
+            total += size * price
             if total >= amount_to_match:
-                return float(price)
+                return price
 
         if order_type == OrderType.FOK:
             raise Exception("no match")
 
-        p0 = positions[0]
-        return float(p0["price"] if isinstance(p0, dict) else p0.price)
+        # Book can't fully fill — return the worst (highest) price walked.
+        return walk[-1][1]
 
     def calculate_sell_market_price(
         self,
@@ -319,16 +330,19 @@ class OrderBuilder:
         if not positions:
             raise Exception("no match")
 
-        total = 0
-        for p in reversed(positions):
-            size = p["size"] if isinstance(p, dict) else p.size
-            price = p["price"] if isinstance(p, dict) else p.price
-            total += float(size)
+        # Walk bids from highest to lowest so the returned price is the
+        # marginal price the seller must accept to move `amount_to_match`
+        # shares. Sort locally to avoid depending on server ordering.
+        walk = sorted(_normalize_positions(positions), key=lambda x: x[1], reverse=True)
+
+        total = 0.0
+        for size, price in walk:
+            total += size
             if total >= amount_to_match:
-                return float(price)
+                return price
 
         if order_type == OrderType.FOK:
             raise Exception("no match")
 
-        p0 = positions[0]
-        return float(p0["price"] if isinstance(p0, dict) else p0.price)
+        # Book can't fully fill — return the worst (lowest) price walked.
+        return walk[-1][1]
