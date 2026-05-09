@@ -752,7 +752,7 @@ class ClobClient:
             else self.get_neg_risk(token_id)
         )
 
-        user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
+        user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None)
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
         build_args = dataclass_replace(order_args, price=price, size=size)
@@ -815,7 +815,7 @@ class ClobClient:
         )
         version = self.__resolve_version()
 
-        user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
+        user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None)
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
         build_args = dataclass_replace(order_args, price=price, amount=amount)
