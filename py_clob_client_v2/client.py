@@ -592,9 +592,9 @@ class ClobClient:
                     p["market"] = params.market
                 if params.asset_id:
                     p["asset_id"] = params.asset_id
-                if params.after:
+                if params.after is not None:
                     p["after"] = params.after
-                if params.before:
+                if params.before is not None:
                     p["before"] = params.before
                 if params.maker_address:
                     p["maker_address"] = params.maker_address
@@ -619,9 +619,9 @@ class ClobClient:
                 p["market"] = params.market
             if params.asset_id:
                 p["asset_id"] = params.asset_id
-            if params.after:
+            if params.after is not None:
                 p["after"] = params.after
-            if params.before:
+            if params.before is not None:
                 p["before"] = params.before
             if params.maker_address:
                 p["maker_address"] = params.maker_address
@@ -654,9 +654,9 @@ class ClobClient:
             p["market"] = params.market
         if params.asset_id:
             p["asset_id"] = params.asset_id
-        if params.before:
+        if params.before is not None:
             p["before"] = params.before
-        if params.after:
+        if params.after is not None:
             p["after"] = params.after
         p["next_cursor"] = cursor
         response = self._get(f"{self.host}{GET_BUILDER_TRADES}", params=p)
