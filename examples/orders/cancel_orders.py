@@ -8,11 +8,15 @@ load_dotenv()
 
 
 def main():
+    # Load the private key from the environment
     pk = os.environ["PK"]
     account = Account.from_key(pk)
+    
+    # Default to Mumbai testnet (80002) if no chain ID is provided
     chain_id = int(os.environ.get("CHAIN_ID", 80002))
     print(f"Address: {account.address}, chainId: {chain_id}")
 
+    # Initialize the ClobClient with API credentials
     host = os.environ.get("CLOB_API_URL", "http://localhost:8080")
     creds = ApiCreds(
         api_key=os.environ["CLOB_API_KEY"],
@@ -21,9 +25,12 @@ def main():
     )
     client = ClobClient(host=host, chain_id=chain_id, key=pk, creds=creds)
 
+    # Cancel one or multiple existing orders by their Order IDs
+    # Note: Replace the example string below with your actual order ID(s)
     resp = client.cancel_orders([
         "0x7ce769d075f4f1263603fde09862f5998f5e6ae4a39a16f3780f0bd708d3fc1c",
     ])
+    
     print(resp)
     print("Done!")
 
