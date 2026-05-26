@@ -1,5 +1,5 @@
 import time
-from typing import Union
+from typing import Optional, Union
 
 from .helpers import (
     to_token_decimals,
@@ -44,8 +44,8 @@ class OrderBuilder:
     def __init__(
         self,
         signer: Signer,
-        signature_type: SignatureTypeV2 = None,
-        funder: str = None,
+        signature_type: Optional[SignatureTypeV2] = None,
+        funder: Optional[str] = None,
     ):
         self.signer = signer
 
@@ -57,6 +57,11 @@ class OrderBuilder:
         # Address which holds funds. Defaults to the signer address.
         # Used for Polymarket proxy wallets and other smart contract wallets.
         self.funder = funder if funder is not None else (self.signer.address() if self.signer else None)
+
+    def _v2_order_signer(self) -> str:
+        if self.signature_type == SignatureTypeV2.POLY_1271:
+            return self.funder
+        return self.signer.address()
 
     def get_order_amounts(
         self, side, size: float, price: float, round_config: RoundConfig
@@ -126,7 +131,7 @@ class OrderBuilder:
         order_args: Union[OrderArgsV1, OrderArgsV2],
         options: CreateOrderOptions,
         version: int = 2,
-        fee_rate_bps: int = None,
+        fee_rate_bps: Optional[int] = None,
     ) -> Union[SignedOrderV1, SignedOrderV2]:
         """
         Creates and signs a limit order.
@@ -187,7 +192,7 @@ class OrderBuilder:
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
-                signer=self.signer.address(),
+                signer=self._v2_order_signer(),
                 signatureType=self.signature_type,
                 timestamp=ts,
                 metadata=getattr(order_args, "metadata", BYTES32_ZERO),
@@ -207,7 +212,7 @@ class OrderBuilder:
         order_args: Union[MarketOrderArgsV1, MarketOrderArgsV2],
         options: CreateOrderOptions,
         version: int = 2,
-        fee_rate_bps: int = None,
+        fee_rate_bps: Optional[int] = None,
     ) -> Union[SignedOrderV1, SignedOrderV2]:
         """
         Creates and signs a market order.
@@ -268,7 +273,7 @@ class OrderBuilder:
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
-                signer=self.signer.address(),
+                signer=self._v2_order_signer(),
                 signatureType=self.signature_type,
                 timestamp=ts,
                 metadata=getattr(order_args, "metadata", BYTES32_ZERO),

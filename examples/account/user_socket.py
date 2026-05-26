@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CONDITION_ID = "0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1"
+CONDITION_ID = os.environ.get(
+    "CONDITION_ID",
+    "0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1",
+)
 
 
 def main():

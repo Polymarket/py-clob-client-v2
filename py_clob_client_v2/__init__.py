@@ -1,5 +1,6 @@
 from .client import ClobClient
 from .constants import CLOB_HOST
+from .fees import adjust_buy_amount_for_fees
 from .order_utils import SignatureTypeV2, Side
 from .clob_types import (
     PriceHistoryInterval,
@@ -26,6 +27,7 @@ from .clob_types import (
     BuilderConfig,
     MarketDetails,
     FeeDetails,
+    ClobRewards,
     ClobToken,
     PricesHistoryParams,
     EarningsParams,
@@ -50,6 +52,8 @@ __all__ = [
     "CLOB_HOST",
     "SignatureTypeV2",
     "Side",
+    # Fee utilities
+    "adjust_buy_amount_for_fees",
     "PriceHistoryInterval",
     # Order input types
     "OrderArgsV1",
@@ -75,6 +79,7 @@ __all__ = [
     "BuilderConfig",
     "MarketDetails",
     "FeeDetails",
+    "ClobRewards",
     "ClobToken",
     "PricesHistoryParams",
     "EarningsParams",

@@ -15,7 +15,10 @@ load_dotenv()
 # OrderType.FAK (Fill And Kill): fills as much as possible immediately, remainder is cancelled.
 # Swap FOK for FAK in create_and_post_market_order to use FAK instead.
 
-YES = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+YES = os.environ.get(
+    "YES_TOKEN_ID",
+    "71321045679252212594626385532706912750332728571942532289631379312455583992563",
+)
 AMOUNT_SHARES = 100
 SEED_PRICE = 0.5
 SEED_SIZE = 150

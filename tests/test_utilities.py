@@ -227,7 +227,7 @@ class TestUtilities(TestCase):
         self.assertEqual(result, 10.0)
 
     def test_adjust_market_buy_amount_platform_fee_only(self):
-        # invariant: effective + platform_fee == budget (within 1e-10)
+        # invariant: adjusted = balance - reserved_fee where reserved_fee uses original amount
         budget = 50.0
         price = 0.5
         fee_rate = 0.25
@@ -240,11 +240,11 @@ class TestUtilities(TestCase):
             fee_exponent=fee_exponent,
         )
         platform_fee_rate = fee_rate * (price * (1 - price)) ** fee_exponent
-        platform_fee = (effective / price) * platform_fee_rate
-        self.assertAlmostEqual(effective + platform_fee, budget, delta=1e-10)
+        reserved_fee = (budget / price) * platform_fee_rate  # fee based on balance (feeBaseAmount = min(100, 50) = 50)
+        self.assertAlmostEqual(effective, budget - reserved_fee, delta=1e-10)
 
     def test_adjust_market_buy_amount_builder_fee_only(self):
-        # invariant: effective + builder_fee == budget (within 1e-10)
+        # invariant: adjusted = balance - reserved_builder_fee
         budget = 50.0
         price = 0.5
         builder_taker_fee_rate = 0.01
@@ -256,11 +256,11 @@ class TestUtilities(TestCase):
             fee_exponent=0,
             builder_taker_fee_rate=builder_taker_fee_rate,
         )
-        builder_fee = effective * builder_taker_fee_rate
-        self.assertAlmostEqual(effective + builder_fee, budget, delta=1e-10)
+        reserved_builder_fee = budget * builder_taker_fee_rate
+        self.assertAlmostEqual(effective, budget - reserved_builder_fee, delta=1e-10)
 
     def test_adjust_market_buy_amount_combined_fees(self):
-        # invariant: effective + platform_fee + builder_fee == budget (within 1e-10)
+        # invariant: adjusted = balance - reserved_platform_fee - reserved_builder_fee
         budget = 50.0
         price = 0.5
         fee_rate = 0.25
@@ -275,12 +275,12 @@ class TestUtilities(TestCase):
             builder_taker_fee_rate=builder_taker_fee_rate,
         )
         platform_fee_rate = fee_rate * (price * (1 - price)) ** fee_exponent
-        platform_fee = (effective / price) * platform_fee_rate
-        builder_fee = effective * builder_taker_fee_rate
-        self.assertAlmostEqual(effective + platform_fee + builder_fee, budget, delta=1e-10)
+        reserved_platform_fee = (budget / price) * platform_fee_rate
+        reserved_builder_fee = budget * builder_taker_fee_rate
+        self.assertAlmostEqual(effective, budget - reserved_platform_fee - reserved_builder_fee, delta=1e-10)
 
     def test_adjust_market_buy_amount_price_near_boundary(self):
-        # price near minimum tick (0.0001) — pfr/price quotient is large, float errors compound
+        # price near minimum tick (0.0001) — feeBaseAmount = min(100, 50) = 50 = balance
         budget = 50.0
         price = 0.0001
         fee_rate = 0.25
@@ -295,9 +295,9 @@ class TestUtilities(TestCase):
             builder_taker_fee_rate=builder_taker_fee_rate,
         )
         platform_fee_rate = fee_rate * (price * (1 - price)) ** fee_exponent
-        platform_fee = (effective / price) * platform_fee_rate
-        builder_fee = effective * builder_taker_fee_rate
-        self.assertAlmostEqual(effective + platform_fee + builder_fee, budget, delta=1e-10)
+        reserved_platform_fee = (budget / price) * platform_fee_rate
+        reserved_builder_fee = budget * builder_taker_fee_rate
+        self.assertAlmostEqual(effective, budget - reserved_platform_fee - reserved_builder_fee, delta=1e-10)
 
     def test_adjust_market_buy_amount_exactly_at_limit(self):
         # balance == total_cost triggers the adjustment path

@@ -45,6 +45,17 @@ def main():
         funder=gnosis_safe_address,
     )
 
+    # Client used with a Polymarket Deposit Wallet: Signature type 3
+    deposit_wallet_address = "0x..."
+    deposit_wallet_client = ClobClient(
+        host=host,
+        chain_id=chain_id,
+        key=pk,
+        creds=creds,
+        signature_type=SignatureTypeV2.POLY_1271,
+        funder=deposit_wallet_address,
+    )
+
 
 if __name__ == "__main__":
     main()

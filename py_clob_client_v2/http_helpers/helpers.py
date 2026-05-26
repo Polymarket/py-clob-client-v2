@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Optional
 
 import httpx
 
@@ -33,7 +34,7 @@ def _overload_headers(method: str, headers: dict) -> dict:
         headers["Accept-Encoding"] = "gzip"
     return headers
 
-def _is_transient_error(exc: Exception, status_code: int = None) -> bool:
+def _is_transient_error(exc: Exception, status_code: Optional[int] = None) -> bool:
     """
     Returns True if the error is likely transient and worth retrying once.
     Matches: 5xx responses, network-level errors (connect, timeout, network).

@@ -1,8 +1,8 @@
 import hashlib
 import json
-from decimal import Decimal
 
 from .clob_types import OrderBookSummary, OrderSummary, TickSize
+from .fees import adjust_buy_amount_for_fees
 
 
 def parse_raw_orderbook_summary(raw_obs: dict) -> OrderBookSummary:
@@ -56,22 +56,9 @@ def adjust_market_buy_amount(
     fee_exponent: float,
     builder_taker_fee_rate: float = 0,
 ) -> float:
-    """Return fee-adjusted amount for a market buy, or the original amount if balance is sufficient."""
-    d_amount = Decimal(str(amount))
-    d_price = Decimal(str(price))
-    d_balance = Decimal(str(user_usdc_balance))
-    d_fee_rate = Decimal(str(fee_rate))
-    d_fee_exponent = Decimal(str(fee_exponent))
-    d_btr = Decimal(str(builder_taker_fee_rate))
-    base = float(d_price * (Decimal("1") - d_price))
-    d_pfr = d_fee_rate * Decimal(str(base ** float(d_fee_exponent)))
-
-    platform_fee = d_amount / d_price * d_pfr
-    total_cost = d_amount + platform_fee + d_amount * d_btr
-    if d_balance <= total_cost:
-        divisor = Decimal("1") + d_pfr / d_price + d_btr
-        return float(d_balance / divisor)
-    return amount
+    return adjust_buy_amount_for_fees(
+        amount, price, user_usdc_balance, fee_rate, fee_exponent, builder_taker_fee_rate
+    )
 
 
 def is_tick_size_smaller(a: TickSize, b: TickSize) -> bool:

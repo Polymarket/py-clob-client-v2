@@ -13,6 +13,7 @@ from py_clob_client_v2.constants import AMOY, BYTES32_ZERO, ZERO_ADDRESS
 from py_clob_client_v2.order_builder.builder import OrderBuilder, ROUNDING_CONFIG
 from py_clob_client_v2.order_builder.constants import BUY, SELL
 from py_clob_client_v2.order_builder.helpers import decimal_places, round_down, round_normal
+from py_clob_client_v2.order_utils.exchange_order_builder_v2 import ORDER_TYPE_STRING
 from py_clob_client_v2.order_utils.model import Side, SignatureTypeV2
 from py_clob_client_v2.signer import Signer
 from py_clob_client_v2.utilities import adjust_market_buy_amount
@@ -23,6 +24,7 @@ chain_id = AMOY
 signer = Signer(private_key=private_key, chain_id=chain_id)
 
 TOKEN_ID = "71321045679252212594626385532706912750332728571942532289631379312455583992563"
+DEPOSIT_WALLET = "0x1111111111111111111111111111111111111111"
 
 class TestOrderBuilder(TestCase):
 
@@ -477,6 +479,15 @@ class TestOrderBuilder(TestCase):
         self.assertFalse(hasattr(order, "nonce"))
         self.assertFalse(hasattr(order, "feeRateBps"))
 
+    def _assert_poly_1271_order(self, order):
+        self._assert_signed_order_v2(order)
+        self.assertEqual(order.maker, DEPOSIT_WALLET)
+        self.assertEqual(order.signer, DEPOSIT_WALLET)
+        self.assertEqual(order.signatureType, SignatureTypeV2.POLY_1271)
+        self.assertTrue(order.signature.startswith("0x"))
+        expected_signature_len = 2 + 130 + 64 + 64 + (len(ORDER_TYPE_STRING) * 2) + 4
+        self.assertEqual(len(order.signature), expected_signature_len)
+
     def test_build_order_buy_0_1(self):
         builder = OrderBuilder(signer)
         order = builder.build_order(
@@ -593,6 +604,18 @@ class TestOrderBuilder(TestCase):
         self._assert_signed_order_v2(order)
         self.assertEqual(order.signatureType, SignatureTypeV2.POLY_GNOSIS_SAFE)
 
+    def test_build_order_poly_1271_signature_type(self):
+        b = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        order = b.build_order(
+            OrderArgsV2(token_id=TOKEN_ID, price=0.5, size=10, side=BUY),
+            CreateOrderOptions(tick_size="0.1", neg_risk=False),
+        )
+        self._assert_poly_1271_order(order)
+
     def test_build_market_order_buy_0_1(self):
         builder = OrderBuilder(signer)
         order = builder.build_market_order(
@@ -660,6 +683,18 @@ class TestOrderBuilder(TestCase):
         self._assert_signed_order_v2(order)
         self.assertEqual(order.builder, builder_code)
 
+    def test_build_market_order_poly_1271_signature_type(self):
+        b = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        order = b.build_market_order(
+            MarketOrderArgsV2(token_id=TOKEN_ID, amount=50, side=BUY, price=0.5),
+            CreateOrderOptions(tick_size="0.1", neg_risk=False),
+        )
+        self._assert_poly_1271_order(order)
+
     def test_build_order_v1_has_fee_rate_bps_nonce_taker(self):
         builder = OrderBuilder(signer)
         order = builder.build_order(
@@ -700,6 +735,37 @@ class TestOrderBuilder(TestCase):
         self.assertEqual(order.feeRateBps, "500")
         self.assertEqual(order.nonce, "3")
         self.assertEqual(order.taker, ZERO_ADDRESS)
+
+    def test_build_order_v1_rejects_poly_1271(self):
+        builder = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        with self.assertRaises(ValueError):
+            builder.build_order(
+                OrderArgsV1(token_id=TOKEN_ID, price=0.5, size=21.04, side=BUY),
+                CreateOrderOptions(tick_size="0.01", neg_risk=False),
+                version=1,
+            )
+
+    def test_build_market_order_v1_rejects_poly_1271(self):
+        builder = OrderBuilder(
+            signer,
+            signature_type=SignatureTypeV2.POLY_1271,
+            funder=DEPOSIT_WALLET,
+        )
+        with self.assertRaises(ValueError):
+            builder.build_market_order(
+                MarketOrderArgsV1(
+                    token_id=TOKEN_ID,
+                    amount=21.04,
+                    side=BUY,
+                    price=0.5,
+                ),
+                CreateOrderOptions(tick_size="0.01", neg_risk=False),
+                version=1,
+            )
 
     def test_build_market_order_v2_has_no_fee_rate_bps_nonce(self):
         builder = OrderBuilder(signer)
@@ -751,9 +817,8 @@ class TestAdjustMarketBuyAmount(TestCase):
 
     # --- conditional: adjustment triggers ---
 
-    def test_no_adjustment_when_balance_exactly_covers_cost(self):
-        # when balance == total_cost, the adjustment formula algebraically recovers the
-        # original amount — user can afford exactly amount + fees, so nothing changes
+    def test_balance_equals_total_cost_returns_amount(self):
+        # balance = amount + fee(amount): enters branch but result == amount
         amount, price, fee_rate, fee_exponent = 50, 0.5, 0.25, 2
         total = self._total_cost(amount, price, fee_rate, fee_exponent)
         result = adjust_market_buy_amount(amount, total, price, fee_rate, fee_exponent)
@@ -765,49 +830,49 @@ class TestAdjustMarketBuyAmount(TestCase):
         result = adjust_market_buy_amount(amount, 48.0, price, fee_rate, fee_exponent)
         self.assertLess(result, amount)
 
-    # --- invariant: adjusted + fees(adjusted) == budget ---
+    # --- invariant: adjusted = balance - reserved_fee ---
 
-    def test_invariant_platform_fee_only(self):
+    def test_platform_fee_only_reserves_original_fee(self):
+        # reserved_fee = fee(amount), adjusted = balance - reserved_fee
         budget, price, fee_rate, fee_exponent = 50, 0.5, 0.25, 2
         result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, fee_rate, fee_exponent), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_builder_fee_only(self):
+    def test_builder_fee_only_reserves_original_fee(self):
         budget, price, builder_rate = 50, 0.5, 0.01
         result = adjust_market_buy_amount(budget, budget, price, 0, 0, builder_rate)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, 0, 0, builder_rate), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, 0, 0, builder_rate) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_combined_fees(self):
+    def test_combined_fees_reserves_original_fee(self):
         budget, price, fee_rate, fee_exponent, builder_rate = 50, 0.5, 0.25, 2, 0.01
         result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent, builder_rate)
-        self.assertAlmostEqual(
-            self._total_cost(result, price, fee_rate, fee_exponent, builder_rate), budget, places=10
-        )
+        reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent, builder_rate) - budget
+        self.assertAlmostEqual(result, budget - reserved_fee, places=10)
 
-    def test_invariant_various_prices(self):
+    def test_reserves_original_fee_at_various_prices(self):
         budget, fee_rate, fee_exponent = 50, 0.25, 2
         for price in [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]:
             result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
+            reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
             self.assertAlmostEqual(
-                self._total_cost(result, price, fee_rate, fee_exponent),
-                budget,
+                result,
+                budget - reserved_fee,
                 places=10,
-                msg=f"invariant failed at price={price}",
+                msg=f"fee reservation failed at price={price}",
             )
 
-    def test_invariant_various_budgets(self):
+    def test_reserves_original_fee_at_various_budgets(self):
         price, fee_rate, fee_exponent = 0.5, 0.25, 2
         for budget in [1.0, 10.0, 50.0, 100.0, 1000.0]:
             result = adjust_market_buy_amount(budget, budget, price, fee_rate, fee_exponent)
+            reserved_fee = self._total_cost(budget, price, fee_rate, fee_exponent) - budget
             self.assertAlmostEqual(
-                self._total_cost(result, price, fee_rate, fee_exponent),
-                budget,
+                result,
+                budget - reserved_fee,
                 places=10,
-                msg=f"invariant failed at budget={budget}",
+                msg=f"fee reservation failed at budget={budget}",
             )
 
     # --- edge cases ---

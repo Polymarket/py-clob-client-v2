@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import asdict, is_dataclass, replace as dataclass_replace
 from typing import Optional
 
 from .clob_types import (
@@ -104,6 +105,7 @@ from .endpoints import (
     VERSION,
 )
 from .exceptions import PolyException
+from .fees import adjust_buy_amount_for_fees, validate_fee_slippage
 from .headers.headers import create_level_1_headers, create_level_2_headers
 from .http_helpers.helpers import (
     delete,
@@ -111,14 +113,15 @@ from .http_helpers.helpers import (
     parse_drop_notification_params,
     post,
 )
-from .order_builder.builder import OrderBuilder
+from .order_builder.builder import OrderBuilder, ROUNDING_CONFIG
+from .order_builder.helpers import round_normal
 from .clob_types import RequestArgs
 from .rfq import RfqClient
 from .signer import Signer
 from .utilities import (
-    adjust_market_buy_amount,
     generate_orderbook_summary_hash,
     is_tick_size_smaller,
+    parse_raw_orderbook_summary,
     price_valid,
 )
 from .order_utils.model.order_data_v1 import order_to_json_v1
@@ -127,28 +130,44 @@ from .order_utils.model.side import Side
 
 logger = logging.getLogger(__name__)
 
+
 def _is_v2_order(order) -> bool:
     """Returns True if order is a V2 signed order (has timestamp field)."""
     return hasattr(order, "timestamp")
+
+
+def _book_params_to_json(params: list) -> list:
+    payload = []
+    for param in params:
+        item = asdict(param) if is_dataclass(param) else dict(param)
+        side = item.get("side")
+        if isinstance(side, int):
+            item["side"] = "BUY" if side == Side.BUY else "SELL"
+        payload.append({k: v for k, v in item.items() if v is not None and v != ""})
+    return payload
+
 
 class ClobClient:
     def __init__(
         self,
         host: str,
         chain_id: int,
-        key: str = None,
-        creds: ApiCreds = None,
-        signature_type: int = None,
-        funder: str = None,
-        builder_config: BuilderConfig = None,
+        key: Optional[str] = None,
+        creds: Optional[ApiCreds] = None,
+        signature_type: Optional[int] = None,
+        funder: Optional[str] = None,
+        builder_config: Optional[BuilderConfig] = None,
         use_server_time: bool = False,
         retry_on_error: bool = False,
+        fee_slippage: float = 0,
     ):
         self.host = host.rstrip("/")
         self.chain_id = chain_id
         self.use_server_time = use_server_time
         self.retry_on_error = retry_on_error
         self.builder_config = builder_config
+        self.fee_slippage = fee_slippage
+        validate_fee_slippage(self.fee_slippage)
 
         self.signer = Signer(key, chain_id) if key else None
         self.creds = creds
@@ -196,10 +215,10 @@ class ClobClient:
         self.creds = creds
         self.mode = self._get_client_mode()
 
-    def _get(self, endpoint: str, headers=None, params: dict = None):
+    def _get(self, endpoint: str, headers=None, params: Optional[dict] = None):
         return get(endpoint, headers=headers, params=params)
 
-    def _post(self, endpoint: str, headers=None, data=None, params: dict = None):
+    def _post(self, endpoint: str, headers=None, data=None, params: Optional[dict] = None):
         return post(
             endpoint,
             headers=headers,
@@ -208,7 +227,7 @@ class ClobClient:
             retry_on_error=self.retry_on_error,
         )
 
-    def _delete(self, endpoint: str, headers=None, data=None, params: dict = None):
+    def _delete(self, endpoint: str, headers=None, data=None, params: Optional[dict] = None):
         return delete(endpoint, headers=headers, data=data, params=params)
 
     def _get_timestamp(self) -> Optional[int]:
@@ -219,14 +238,14 @@ class ClobClient:
             return result.get("time") or result.get("timestamp")
         return int(result)
 
-    def _l1_headers(self, nonce: int = None) -> dict:
+    def _l1_headers(self, nonce: Optional[int] = None) -> dict:
         self.assert_level_1_auth()
         return create_level_1_headers(
             self.signer, nonce=nonce, timestamp=self._get_timestamp()
         )
 
     def _l2_headers(
-        self, method: str, endpoint: str, body=None, serialized_body: str = None
+        self, method: str, endpoint: str, body=None, serialized_body: Optional[str] = None
     ) -> dict:
         self.assert_level_2_auth()
         request_args = RequestArgs(
@@ -315,9 +334,13 @@ class ClobClient:
         )
 
     def get_order_books(self, params: list):
-        return self._post(f"{self.host}{GET_ORDER_BOOKS}", data=params)
+        return self._post(
+            f"{self.host}{GET_ORDER_BOOKS}", data=_book_params_to_json(params)
+        )
 
     def get_order_book_hash(self, orderbook: OrderBookSummary) -> str:
+        if isinstance(orderbook, dict):
+            orderbook = parse_raw_orderbook_summary(orderbook)
         return generate_orderbook_summary_hash(orderbook)
 
     def get_tick_size(self, token_id: str) -> TickSize:
@@ -368,7 +391,9 @@ class ClobClient:
         return self._get(f"{self.host}{GET_MIDPOINT}", params={"token_id": token_id})
 
     def get_midpoints(self, params: list):
-        return self._post(f"{self.host}{GET_MIDPOINTS}", data=params)
+        return self._post(
+            f"{self.host}{GET_MIDPOINTS}", data=_book_params_to_json(params)
+        )
 
     def get_price(self, token_id: str, side):
         if isinstance(side, int):
@@ -378,13 +403,17 @@ class ClobClient:
         )
 
     def get_prices(self, params: list):
-        return self._post(f"{self.host}{GET_PRICES}", data=params)
+        return self._post(
+            f"{self.host}{GET_PRICES}", data=_book_params_to_json(params)
+        )
 
     def get_spread(self, token_id: str):
         return self._get(f"{self.host}{GET_SPREAD}", params={"token_id": token_id})
 
     def get_spreads(self, params: list):
-        return self._post(f"{self.host}{GET_SPREADS}", data=params)
+        return self._post(
+            f"{self.host}{GET_SPREADS}", data=_book_params_to_json(params)
+        )
 
     def get_last_trade_price(self, token_id: str):
         return self._get(
@@ -392,7 +421,10 @@ class ClobClient:
         )
 
     def get_last_trades_prices(self, params: list):
-        return self._post(f"{self.host}{GET_LAST_TRADES_PRICES}", data=params)
+        return self._post(
+            f"{self.host}{GET_LAST_TRADES_PRICES}",
+            data=_book_params_to_json(params),
+        )
 
     def get_prices_history(self, params: PricesHistoryParams):
         if params.interval is None and (params.start_ts is None or params.end_ts is None):
@@ -455,7 +487,7 @@ class ClobClient:
             results.extend(response["data"])
         return results
 
-    def create_api_key(self, nonce: int = None) -> ApiCreds:
+    def create_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         headers = self._l1_headers(nonce=nonce)
         resp = self._post(f"{self.host}{CREATE_API_KEY}", headers=headers)
         return ApiCreds(
@@ -464,7 +496,7 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def derive_api_key(self, nonce: int = None) -> ApiCreds:
+    def derive_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         headers = self._l1_headers(nonce=nonce)
         resp = self._get(f"{self.host}{DERIVE_API_KEY}", headers=headers)
         return ApiCreds(
@@ -473,7 +505,7 @@ class ClobClient:
             api_passphrase=resp["passphrase"],
         )
 
-    def create_or_derive_api_key(self, nonce: int = None) -> ApiCreds:
+    def create_or_derive_api_key(self, nonce: Optional[int] = None) -> ApiCreds:
         try:
             resp = self.create_api_key(nonce=nonce)
             if resp.api_key:
@@ -503,7 +535,7 @@ class ClobClient:
         self,
         params: OpenOrderParams = None,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", ORDERS)
         results = []
@@ -528,7 +560,7 @@ class ClobClient:
     def get_pre_migration_orders(
         self,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", PRE_MIGRATION_ORDERS)
         results = []
@@ -546,7 +578,7 @@ class ClobClient:
         self,
         params: TradeParams = None,
         only_first_page: bool = False,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> list:
         headers = self._l2_headers("GET", TRADES)
         results = []
@@ -577,7 +609,7 @@ class ClobClient:
     def get_trades_paginated(
         self,
         params: TradeParams = None,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> dict:
         headers = self._l2_headers("GET", TRADES)
         cursor = next_cursor or INITIAL_CURSOR
@@ -608,11 +640,10 @@ class ClobClient:
     def get_builder_trades(
         self,
         params: BuilderTradeParams,
-        next_cursor: str = None,
+        next_cursor: Optional[str] = None,
     ) -> dict:
         if not params.builder_code or params.builder_code == BYTES32_ZERO:
             raise PolyException("builder_code is required and cannot be zero")
-        headers = self._l2_headers("GET", GET_BUILDER_TRADES)
         cursor = next_cursor or INITIAL_CURSOR
         p = {"builder_code": params.builder_code}
         if params.id:
@@ -628,7 +659,7 @@ class ClobClient:
         if params.after:
             p["after"] = params.after
         p["next_cursor"] = cursor
-        response = self._get(f"{self.host}{GET_BUILDER_TRADES}", headers=headers, params=p)
+        response = self._get(f"{self.host}{GET_BUILDER_TRADES}", params=p)
         data = response.get("data", [])
         return {
             "trades": list(data) if data else [],
@@ -696,18 +727,37 @@ class ClobClient:
                 f"invalid price ({order_args.price}), min: {ts} - max: {1 - ts}"
             )
 
+        price = round_normal(order_args.price, ROUNDING_CONFIG[tick_size].price)
+
+        version = self.__resolve_version()
+
+        size = order_args.size
+        if (
+            version == 2
+            and (order_args.side == "BUY" or order_args.side == Side.BUY)
+            and getattr(order_args, "user_usdc_balance", None) is not None
+        ):
+            adjusted = self._adjust_buy_amount_for_balance(
+                token_id,
+                size * price,
+                price,
+                order_args.user_usdc_balance,
+                getattr(order_args, "builder_code", None),
+            )
+            size = adjusted / price
+
         neg_risk = (
             options.neg_risk
             if (options and options.neg_risk is not None)
             else self.get_neg_risk(token_id)
         )
-        version = self.__resolve_version()
 
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
+        build_args = dataclass_replace(order_args, price=price, size=size)
         return self.builder.build_order(
-            order_args,
+            build_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,
@@ -727,18 +777,19 @@ class ClobClient:
             token_id, options.tick_size if options else None
         )
 
-        if not order_args.price:
-            order_args.price = self.calculate_market_price(
+        price = order_args.price
+        if not price:
+            price = self.calculate_market_price(
                 token_id,
                 order_args.side,
                 order_args.amount,
                 order_args.order_type,
             )
 
-        if not price_valid(order_args.price, tick_size):
+        if not price_valid(price, tick_size):
             ts = float(tick_size)
             raise PolyException(
-                f"invalid price ({order_args.price}), min: {ts} - max: {1 - ts}"
+                f"invalid price ({price}), min: {ts} - max: {1 - ts}"
             )
 
         if self.builder_config and self.builder_config.builder_code:
@@ -747,21 +798,14 @@ class ClobClient:
 
         builder_code = getattr(order_args, "builder_code", BYTES32_ZERO)
 
+        amount = order_args.amount
         if (order_args.side == "BUY" or order_args.side == Side.BUY) and getattr(order_args, "user_usdc_balance", None):
-            self.__ensure_builder_fee_rate_cached(builder_code)
-            builder_taker_fee_rate = (
-                self.__builder_fee_rates[builder_code].taker
-                if builder_code and builder_code != BYTES32_ZERO and builder_code in self.__builder_fee_rates
-                else 0
-            )
-            fi = self.__fee_infos.get(token_id) or FeeInfo()
-            order_args.amount = adjust_market_buy_amount(
-                order_args.amount,
+            amount = self._adjust_buy_amount_for_balance(
+                token_id,
+                amount,
+                price,
                 order_args.user_usdc_balance,
-                order_args.price,
-                fi.rate or 0.0,
-                fi.exponent or 0.0,
-                builder_taker_fee_rate,
+                builder_code,
             )
 
         neg_risk = (
@@ -774,8 +818,9 @@ class ClobClient:
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
         fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
 
+        build_args = dataclass_replace(order_args, price=price, amount=amount)
         return self.builder.build_market_order(
-            order_args,
+            build_args,
             CreateOrderOptions(tick_size=tick_size, neg_risk=neg_risk),
             version=version,
             fee_rate_bps=fee_rate_bps,
@@ -1015,6 +1060,33 @@ class ClobClient:
     def get_market_trades_events(self, condition_id: str):
         return self._get(f"{self.host}{GET_MARKET_TRADES_EVENTS}{condition_id}")
 
+    def _get_builder_taker_fee_rate(self, builder_code: Optional[str] = None) -> float:
+        if not builder_code or builder_code == BYTES32_ZERO:
+            return 0
+        self.__ensure_builder_fee_rate_cached(builder_code)
+        return self.__builder_fee_rates.get(builder_code, BuilderFeeRate()).taker
+
+    def _adjust_buy_amount_for_balance(
+        self,
+        token_id: str,
+        amount: float,
+        price: float,
+        user_usdc_balance: float,
+        builder_code: Optional[str] = None,
+    ) -> float:
+        self.__ensure_market_info_cached(token_id)
+        builder_taker_fee_rate = self._get_builder_taker_fee_rate(builder_code)
+        fi = self.__fee_infos.get(token_id) or FeeInfo()
+        return adjust_buy_amount_for_fees(
+            amount,
+            price,
+            user_usdc_balance,
+            fi.rate or 0.0,
+            fi.exponent or 0.0,
+            builder_taker_fee_rate,
+            self.fee_slippage,
+        )
+
     def __resolve_tick_size(self, token_id: str, tick_size: TickSize = None) -> TickSize:
         min_tick_size = self.get_tick_size(token_id)
         if tick_size:
@@ -1025,7 +1097,7 @@ class ClobClient:
             return tick_size
         return min_tick_size
 
-    def __resolve_fee_rate_bps(self, token_id: str, user_fee_rate_bps: int = None) -> int:
+    def __resolve_fee_rate_bps(self, token_id: str, user_fee_rate_bps: Optional[int] = None) -> int:
         market_fee_rate_bps = self.get_fee_rate_bps(token_id)
         if (
             market_fee_rate_bps > 0

@@ -13,8 +13,7 @@ def build_hmac_signature(
     base64_secret = base64.urlsafe_b64decode(secret)
     message = str(timestamp) + str(method) + str(requestPath)
     if body:
-        # NOTE: Necessary to replace single quotes with double quotes
-        # to generate the same hmac message as go and typescript
+        # Match the canonical API signing payload format.
         message += str(body).replace("'", '"')
 
     # nosec: SHA256 is used here for API request signing (HMAC-SHA256), not password hashing

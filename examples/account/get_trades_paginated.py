@@ -6,6 +6,11 @@ from py_clob_client_v2 import ClobClient, ApiCreds, TradeParams
 
 load_dotenv()
 
+CONDITION_ID = os.environ.get(
+    "CONDITION_ID",
+    "0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1",
+)
+
 
 def main():
     pk = os.environ["PK"]
@@ -23,14 +28,14 @@ def main():
 
     # only first page
     print(client.get_trades_paginated(TradeParams(
-        market="0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1",
+        market=CONDITION_ID,
         maker_address=account.address,
     )))
 
     # fetch only second page
     print(client.get_trades_paginated(
         TradeParams(
-            market="0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1",
+            market=CONDITION_ID,
             maker_address=account.address,
         ),
         next_cursor="MzAw",
