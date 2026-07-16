@@ -234,6 +234,45 @@ class TestPostOrderResolution(unittest.TestCase):
 
         self.assertEqual(res["transactionsHashes"], ["0x111"])
 
+    def test_retries_after_transient_trade_polling_failures(self):
+        client = _make_client()
+        response = _make_order_response(tradeIDs=["trade-1"])
+        executed = _make_trade(status="MINED", transaction_hash="0xfff")
+        with (
+            patch.object(client, "_post", return_value=response),
+            patch.object(
+                client,
+                "get_trades",
+                side_effect=[Exception("trades api unavailable"), [executed]],
+            ) as get_trades,
+            patch("py_clob_client_v2.client.time.sleep"),
+        ):
+            res = client.post_order(_make_signed_order(), OrderType.FOK)
+
+        self.assertEqual(res["transactionsHashes"], ["0xfff"])
+        self.assertEqual(get_trades.call_count, 2)
+
+    def test_never_raises_on_successful_post_when_polling_keeps_failing(self):
+        client = _make_client()
+        response = _make_order_response(tradeIDs=["trade-1"])
+        clock = iter(float(i) for i in range(100_000))
+        with (
+            patch.object(client, "_post", return_value=response),
+            patch.object(
+                client, "get_trades", side_effect=Exception("trades api unavailable")
+            ),
+            patch(
+                "py_clob_client_v2.client.time.monotonic",
+                side_effect=lambda: next(clock),
+            ),
+            patch("py_clob_client_v2.client.time.sleep"),
+        ):
+            res = client.post_order(_make_signed_order(), OrderType.FOK)
+
+        self.assertNotIn("transactionsHashes", res)
+        self.assertEqual(res["tradeIDs"], ["trade-1"])
+        self.assertEqual(res["status"], "matched")
+
     def test_deduplicates_trade_ids_before_polling(self):
         client = _make_client()
         response = _make_order_response(tradeIDs=["trade-1", "trade-1"])

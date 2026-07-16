@@ -949,9 +949,16 @@ class ClobClient:
             for trade_id in ids:
                 if trade_id in resolved:
                     continue
-                for trade in self.get_trades(
-                    TradeParams(id=trade_id), only_first_page=True
-                ):
+                try:
+                    trades = self.get_trades(
+                        TradeParams(id=trade_id), only_first_page=True
+                    )
+                except Exception:
+                    # A failed poll must never raise out of a successfully
+                    # posted order; treat it as "not resolved yet" and let
+                    # the loop retry.
+                    trades = []
+                for trade in trades:
                     if trade.get("id") == trade_id and _is_trade_resolved(trade):
                         resolved[trade_id] = trade
             if (
