@@ -7,6 +7,7 @@ from .helpers import (
     round_normal,
     round_up,
     decimal_places,
+    price_to_fraction,
 )
 from .constants import BUY, SELL
 from ..config import get_contract_config
@@ -102,28 +103,27 @@ class OrderBuilder:
         """Returns (Side, maker_amount, taker_amount) for a market order."""
         if isinstance(side, Side):
             side = BUY if side == Side.BUY else SELL
-        # V2 change: market orders use round_down for price (v1 used round_normal)
+
         raw_price = round_down(price, round_config.price)
+        price_numerator, price_denominator = price_to_fraction(
+            raw_price, round_config.price
+        )
+
+        amount_units = to_token_decimals(round_down(amount, round_config.size))
 
         if side == BUY:
-            raw_maker_amt = round_down(amount, round_config.size)
-            raw_taker_amt = raw_maker_amt / raw_price
-            if decimal_places(raw_taker_amt) > round_config.amount:
-                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 4)
-                if decimal_places(raw_taker_amt) > round_config.amount:
-                    raw_taker_amt = round_down(raw_taker_amt, round_config.amount)
+            lots = amount_units // price_numerator
+            maker_amount = lots * price_numerator
+            taker_amount = lots * price_denominator
 
-            return Side.BUY, to_token_decimals(raw_maker_amt), to_token_decimals(raw_taker_amt)
+            return Side.BUY, maker_amount, taker_amount
 
         elif side == SELL:
-            raw_maker_amt = round_down(amount, round_config.size)
-            raw_taker_amt = raw_maker_amt * raw_price
-            if decimal_places(raw_taker_amt) > round_config.amount:
-                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 4)
-                if decimal_places(raw_taker_amt) > round_config.amount:
-                    raw_taker_amt = round_down(raw_taker_amt, round_config.amount)
+            lots = amount_units // price_denominator
+            maker_amount = lots * price_denominator
+            taker_amount = lots * price_numerator
 
-            return Side.SELL, to_token_decimals(raw_maker_amt), to_token_decimals(raw_taker_amt)
+            return Side.SELL, maker_amount, taker_amount
 
         else:
             raise ValueError(f"order_args.side must be '{BUY}' or '{SELL}'")

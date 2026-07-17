@@ -118,7 +118,7 @@ from .http_helpers.helpers import (
     post,
 )
 from .order_builder.builder import OrderBuilder, ROUNDING_CONFIG
-from .order_builder.helpers import round_normal
+from .order_builder.helpers import round_normal, round_down
 from .clob_types import RequestArgs
 from .rfq import RfqClient
 from .signer import Signer
@@ -796,7 +796,7 @@ class ClobClient:
                 order_args.amount,
                 order_args.order_type,
             )
-
+        price = round_down(price, ROUNDING_CONFIG[tick_size].price)
         if not price_valid(price, tick_size):
             ts = float(tick_size)
             raise PolyException(
