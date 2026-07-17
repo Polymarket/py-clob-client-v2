@@ -5,6 +5,18 @@
 
 Python client for the Polymarket CLOB (v2)
 
+## Environment Setup
+
+Before running the examples or initializing the client, ensure you have set up your environment variables. You can copy the provided example file to get started:
+
+```bash
+cp .env.example .env
+```
+
+Then, populate your new `.env` file with your credentials:
+- `PK`: Your wallet's private key (Required for L1 auth).
+- `CLOB_API_KEY`, `CLOB_SECRET`, `CLOB_PASS_PHRASE`: Your API credentials (Required for L2 auth).
+
 ### Usage
 
 ```python
@@ -26,7 +38,7 @@ client = ClobClient(host=host, chain_id=chain_id, key=os.environ["PK"], creds=cr
 # Place a resting limit buy (GTC)
 resp = client.create_and_post_order(
     order_args=OrderArgs(
-        token_id="",  # token ID of the market outcome — get from https://docs.polymarket.com
+        token_id="",  # token ID of the market outcome — get from [https://docs.polymarket.com](https://docs.polymarket.com)
         price=0.4,
         side=Side.BUY,
         size=100,
