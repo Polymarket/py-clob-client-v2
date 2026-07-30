@@ -6,6 +6,7 @@ from typing import Optional
 
 from .clob_types import (
     ApiCreds,
+    AssetType,
     BalanceAllowanceParams,
     BookParams,
     BuilderConfig,
@@ -26,6 +27,7 @@ from .clob_types import (
     OrderType,
     PartialCreateOrderOptions,
     PostOrdersArgs,
+    PriceHistoryInterval,
     PricesHistoryParams,
     RewardsMarketsParams,
     TickSize,
@@ -450,7 +452,7 @@ class ClobClient:
         if params.fidelity is not None:
             p["fidelity"] = params.fidelity
         if params.interval is not None:
-            p["interval"] = params.interval
+            p["interval"] = params.interval.value if isinstance(params.interval, PriceHistoryInterval) else params.interval
         return self._get(f"{self.host}{GET_PRICES_HISTORY}", params=p)
 
     def calculate_market_price(
@@ -700,7 +702,7 @@ class ClobClient:
         p = {"signature_type": int(self.builder.signature_type)}
         if params:
             if params.asset_type:
-                p["asset_type"] = str(params.asset_type)
+                p["asset_type"] = params.asset_type.value if isinstance(params.asset_type, AssetType) else params.asset_type
             if params.token_id:
                 p["token_id"] = params.token_id
         return self._get(f"{self.host}{GET_BALANCE_ALLOWANCE}", headers=headers, params=p)
@@ -710,7 +712,7 @@ class ClobClient:
         p = {"signature_type": int(self.builder.signature_type)}
         if params:
             if params.asset_type:
-                p["asset_type"] = str(params.asset_type)
+                p["asset_type"] = params.asset_type.value if isinstance(params.asset_type, AssetType) else params.asset_type
             if params.token_id:
                 p["token_id"] = params.token_id
         return self._get(f"{self.host}{UPDATE_BALANCE_ALLOWANCE}", headers=headers, params=p)

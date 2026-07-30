@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 
 from py_clob_client_v2.clob_types import (
+    AssetType,
     BalanceAllowanceParams,
     DropNotificationParams,
     OpenOrderParams,
@@ -187,7 +188,8 @@ def add_balance_allowance_params_to_url(
     if params:
         url = url + "?"
         if params.asset_type:
-            url = build_query_params(url, "asset_type", str(params.asset_type))
+            asset_type_value = params.asset_type.value if isinstance(params.asset_type, AssetType) else params.asset_type
+            url = build_query_params(url, "asset_type", asset_type_value)
         if params.token_id:
             url = build_query_params(url, "token_id", params.token_id)
         if params.signature_type is not None:
