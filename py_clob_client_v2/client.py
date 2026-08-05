@@ -383,6 +383,18 @@ class ClobClient:
         return self.__neg_risk[token_id]
 
     def get_fee_rate_bps(self, token_id: str) -> int:
+        """Return the ``base_fee`` value from ``GET /fee-rate`` for ``token_id``.
+
+        This is the fee-authorization value that gets signed into the
+        ``feeRateBps`` field of v1 orders (see ``__resolve_fee_rate_bps``); it is
+        the maximum fee rate the operator is permitted to charge, capped
+        on-chain by the exchange's global max fee rate. It is a constant
+        (currently ``1000`` bps for every fee-bearing market, ``0`` for fee-free
+        markets) and is **not** the effective per-market rate: the fee actually
+        charged is computed from the per-category rate. Use
+        :meth:`get_fee_rate` for that real rate, or
+        :meth:`get_fee_exponent`/the fee helpers to estimate the charged fee.
+        """
         if token_id in self.__fee_rates:
             return self.__fee_rates[token_id]
 
@@ -391,6 +403,19 @@ class ClobClient:
         )
         self.__fee_rates[token_id] = result.get("base_fee") or 0
         return self.__fee_rates[token_id]
+
+    def get_fee_rate(self, token_id: str) -> float:
+        """Return the real per-market fee rate (``fd.r``) for ``token_id``.
+
+        Unlike :meth:`get_fee_rate_bps`, this is the effective per-category rate
+        the charged fee is derived from (e.g. ``0.07`` for a Crypto market),
+        expressed as a fraction. Fetched from the market's ``fd`` block on
+        ``GET /clob-markets/{condition_id}``.
+        """
+        if token_id in self.__fee_infos:
+            return self.__fee_infos[token_id].rate
+        self.__ensure_market_info_cached(token_id)
+        return self.__fee_infos[token_id].rate
 
     def get_fee_exponent(self, token_id: str) -> float:
         if token_id in self.__fee_infos:
