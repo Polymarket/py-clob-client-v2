@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import asdict, is_dataclass, replace as dataclass_replace
 from typing import Optional
 
@@ -34,10 +35,13 @@ from .constants import (
     BUILDER_FEES_BPS,
     BYTES32_ZERO,
     END_CURSOR,
+    FAILED_TRADE_STATUS,
     INITIAL_CURSOR,
     L1_AUTH_UNAVAILABLE,
     L2_AUTH_UNAVAILABLE,
     ORDER_VERSION_MISMATCH_ERROR,
+    RESOLVE_TRADES_POLL_INTERVAL_SECONDS,
+    RESOLVE_TRADES_TIMEOUT_SECONDS,
     L0,
     L1,
     L2,
@@ -134,6 +138,13 @@ logger = logging.getLogger(__name__)
 def _is_v2_order(order) -> bool:
     """Returns True if order is a V2 signed order (has timestamp field)."""
     return hasattr(order, "timestamp")
+
+
+def _is_trade_resolved(trade: dict) -> bool:
+    # A trade is resolved once execution reached a terminal outcome: it either
+    # carries a settlement transaction hash or it failed and never will.
+    status = str(trade.get("status", "")).upper()
+    return status == FAILED_TRADE_STATUS or bool(trade.get("transaction_hash"))
 
 
 def _book_params_to_json(params: list) -> list:
@@ -860,6 +871,13 @@ class ClobClient:
         post_only: bool = False,
         defer_exec: bool = False,
     ):
+        """Posts an order to the CLOB.
+
+        When the order matches, the response carries the settlement
+        transaction hashes of its fills in ``transactionsHashes``, resolved on
+        a best-effort basis. If a hash is not available yet, the fill's trade
+        can be followed via ``tradeIDs``.
+        """
         self.assert_level_2_auth()
         if post_only and order_type in (OrderType.FOK, OrderType.FAK):
             raise ValueError("post_only is not supported for FOK/FAK orders")
@@ -880,7 +898,9 @@ class ClobClient:
         if self._is_order_version_mismatch(res):
             self.__resolve_version(force_update=True)
 
-        return res
+        if defer_exec:
+            return res
+        return self._resolve_transactions_hashes(res)
 
     def post_orders(self, args: list, post_only: bool = False, defer_exec: bool = False):
         self.assert_level_2_auth()
@@ -909,7 +929,71 @@ class ClobClient:
         if self._is_order_version_mismatch(res):
             self.__resolve_version(force_update=True)
 
-        return res
+        if defer_exec or not isinstance(res, list):
+            return res
+        return [self._resolve_transactions_hashes(response) for response in res]
+
+    def _wait_for_resolved_trades(self, trade_ids: list) -> list:
+        # Polls the given trades until every one reaches a terminal execution
+        # outcome (it carries a settlement transaction hash or its status is
+        # FAILED) or the polling window elapses. Best-effort: returns whatever
+        # trades resolved in time and never raises.
+        ids = [trade_id for trade_id in dict.fromkeys(trade_ids) if trade_id]
+        if not ids:
+            return []
+
+        resolved = {}
+        deadline = time.monotonic() + RESOLVE_TRADES_TIMEOUT_SECONDS
+
+        while True:
+            for trade_id in ids:
+                if trade_id in resolved:
+                    continue
+                try:
+                    trades = self.get_trades(
+                        TradeParams(id=trade_id), only_first_page=True
+                    )
+                except Exception:
+                    # A failed poll must never raise out of a successfully
+                    # posted order; treat it as "not resolved yet" and let
+                    # the loop retry.
+                    trades = []
+                for trade in trades:
+                    if trade.get("id") == trade_id and _is_trade_resolved(trade):
+                        resolved[trade_id] = trade
+            if (
+                all(trade_id in resolved for trade_id in ids)
+                or time.monotonic() >= deadline
+            ):
+                return [resolved[trade_id] for trade_id in ids if trade_id in resolved]
+            time.sleep(RESOLVE_TRADES_POLL_INTERVAL_SECONDS)
+
+    def _resolve_transactions_hashes(self, response):
+        # Fills `transactionsHashes` on an order response whose trades executed
+        # asynchronously (the server returned `tradeIDs` without hashes), by
+        # polling the trades until they resolve. Best-effort: on timeout the
+        # response is returned with whatever hashes resolved, which may be
+        # none. Trades that failed execution never contribute a hash.
+        if not isinstance(response, dict):
+            return response
+        if response.get("transactionsHashes"):
+            return response
+
+        trade_ids = response.get("tradeIDs") or []
+        if not trade_ids:
+            return response
+
+        resolved_trades = self._wait_for_resolved_trades(trade_ids)
+        transactions_hashes = [
+            trade["transaction_hash"]
+            for trade in resolved_trades
+            if str(trade.get("status", "")).upper() != FAILED_TRADE_STATUS
+            and trade.get("transaction_hash")
+        ]
+
+        if not transactions_hashes:
+            return response
+        return {**response, "transactionsHashes": transactions_hashes}
 
     def cancel_order(self, payload: OrderPayload):
         self.assert_level_2_auth()

@@ -36,6 +36,8 @@ from ..order_utils.model.order_data_v2 import OrderDataV2, SignedOrderV2
 ROUNDING_CONFIG: dict = {
     "0.1":    RoundConfig(price=1, size=2, amount=3),
     "0.01":   RoundConfig(price=2, size=2, amount=4),
+    "0.005":  RoundConfig(price=3, size=2, amount=5),
+    "0.0025": RoundConfig(price=4, size=2, amount=6),
     "0.001":  RoundConfig(price=3, size=2, amount=5),
     "0.0001": RoundConfig(price=4, size=2, amount=6),
 }

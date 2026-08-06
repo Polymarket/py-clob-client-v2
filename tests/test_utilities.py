@@ -186,7 +186,14 @@ class TestUtilities(TestCase):
             self.assertNotIn("nonce", o)
 
     def test_order_to_json_v2_neg_risk(self):
-        for tick_size, price in [("0.1", 0.5), ("0.01", 0.56), ("0.001", 0.056), ("0.0001", 0.0056)]:
+        for tick_size, price in [
+            ("0.1", 0.5),
+            ("0.01", 0.56),
+            ("0.005", 0.555),
+            ("0.0025", 0.5525),
+            ("0.001", 0.056),
+            ("0.0001", 0.0056),
+        ]:
             for side in [BUY, SELL]:
                 order = builder.build_order(
                     OrderArgsV2(token_id=TOKEN_ID, price=price, size=10, side=side),
