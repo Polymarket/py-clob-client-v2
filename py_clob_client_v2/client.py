@@ -102,6 +102,7 @@ from .endpoints import (
     POST_HEARTBEAT,
     POST_ORDER,
     POST_ORDERS,
+    RATE_LIMIT_TIER,
     REVOKE_BUILDER_API_KEY,
     TIME,
     TRADES,
@@ -524,6 +525,10 @@ class ClobClient:
         except Exception:
             pass
         return self.derive_api_key(nonce=nonce)
+
+    def get_rate_limit_tier(self):
+        headers = self._l2_headers("GET", RATE_LIMIT_TIER)
+        return self._get(f"{self.host}{RATE_LIMIT_TIER}", headers=headers)
 
     def get_api_keys(self):
         headers = self._l2_headers("GET", GET_API_KEYS)

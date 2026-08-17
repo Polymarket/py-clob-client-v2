@@ -101,3 +101,6 @@ GET_RFQ_BEST_QUOTE = "/rfq/data/best-quote"
 RFQ_REQUESTS_ACCEPT = "/rfq/request/accept"
 RFQ_QUOTE_APPROVE = "/rfq/quote/approve"
 RFQ_CONFIG = "/rfq/config"
+
+# Rate Limit Tier Endpoint
+RATE_LIMIT_TIER = "/v1/user/rate-limit-tier"
