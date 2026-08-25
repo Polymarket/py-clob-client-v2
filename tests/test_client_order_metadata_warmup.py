@@ -53,6 +53,11 @@ class TestClientOrderMetadataWarmup(TestCase):
     def test_successful_v2_warmup_removes_metadata_rest_from_first_orders(self):
         self._install_responses(version=2)
         self.client.warm_up_order_metadata(CONDITION_ID, builder_code=BUILDER_CODE)
+        self.client.warm_up_order_metadata(CONDITION_ID, builder_code=BUILDER_CODE)
+        self.assertEqual(
+            self.calls.count(f"{HOST}{GET_BUILDER_FEE_RATE}{BUILDER_CODE}"),
+            1,
+        )
         self.calls.clear()
 
         limit_order = self.client.create_order(

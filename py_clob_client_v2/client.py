@@ -353,7 +353,11 @@ class ClobClient:
             for token_id in token_ids:
                 self.get_fee_rate_bps(token_id)
 
-        if builder_code and builder_code != BYTES32_ZERO:
+        if (
+            builder_code
+            and builder_code != BYTES32_ZERO
+            and builder_code not in self.__builder_fee_rates
+        ):
             self.__load_builder_fee_rate(builder_code)
 
     def get_order_book(self, token_id: str):
