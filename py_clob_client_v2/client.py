@@ -339,6 +339,27 @@ class ClobClient:
 
         return result
 
+    def warm_up_order_metadata(
+        self,
+        condition_id: str,
+        builder_code: Optional[str] = None,
+    ) -> None:
+        """Cache the public metadata needed to construct orders for a market."""
+        result = self.get_clob_market_info(condition_id)
+        version = self.__resolve_version()
+        token_ids = [token["t"] for token in result["t"] if token and token.get("t")]
+
+        if version == 1:
+            for token_id in token_ids:
+                self.get_fee_rate_bps(token_id)
+
+        if (
+            builder_code
+            and builder_code != BYTES32_ZERO
+            and builder_code not in self.__builder_fee_rates
+        ):
+            self.__load_builder_fee_rate(builder_code)
+
     def get_order_book(self, token_id: str):
         return self._get(
             f"{self.host}{GET_ORDER_BOOK}", params={"token_id": token_id}
@@ -1206,13 +1227,19 @@ class ClobClient:
         if builder_code in self.__builder_fee_rates:
             return
         try:
-            result = self._get(f"{self.host}{GET_BUILDER_FEE_RATE}{builder_code}")
-            self.__builder_fee_rates[builder_code] = BuilderFeeRate(
-                maker=result.get("builder_maker_fee_rate_bps", 0) / BUILDER_FEES_BPS,
-                taker=result.get("builder_taker_fee_rate_bps", 0) / BUILDER_FEES_BPS,
-            )
+            self.__load_builder_fee_rate(builder_code)
         except Exception:
-            logging.warning("failed to fetch builder fee rate for %s, will retry on next order", builder_code)
+            logging.warning(
+                "failed to fetch builder fee rate for %s, will retry on next order",
+                builder_code,
+            )
+
+    def __load_builder_fee_rate(self, builder_code: str) -> None:
+        result = self._get(f"{self.host}{GET_BUILDER_FEE_RATE}{builder_code}")
+        self.__builder_fee_rates[builder_code] = BuilderFeeRate(
+            maker=result.get("builder_maker_fee_rate_bps", 0) / BUILDER_FEES_BPS,
+            taker=result.get("builder_taker_fee_rate_bps", 0) / BUILDER_FEES_BPS,
+        )
 
     def __ensure_market_info_cached(self, token_id: str):
         if token_id in self.__fee_infos:

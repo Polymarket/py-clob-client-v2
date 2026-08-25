@@ -86,8 +86,14 @@ class ExchangeOrderBuilderV2:
     def build_signed_order(self, order_data: OrderDataV2) -> SignedOrderV2:
         order = self.build_order(order_data)
         typed_data = self.build_order_typed_data(order)
-        signature = self.build_order_signature(typed_data)
-        return SignedOrderV2(**{**dataclasses.asdict(order), "signature": signature})
+        signature, order_hash = self._build_order_signature_and_hash(typed_data)
+        return SignedOrderV2(
+            **{
+                **dataclasses.asdict(order),
+                "signature": signature,
+                "order_hash": order_hash,
+            }
+        )
 
     def build_order(self, order_data: OrderDataV2) -> OrderV2:
         signer_addr = order_data.signer if order_data.signer else order_data.maker
@@ -157,6 +163,16 @@ class ExchangeOrderBuilderV2:
         encoded = encode_typed_data(full_message=typed_data)
         signed = Account.sign_message(encoded, private_key=self.signer.private_key)
         return "0x" + signed.signature.hex()
+
+    def _build_order_signature_and_hash(self, typed_data: dict) -> tuple[str, str]:
+        encoded = encode_typed_data(full_message=typed_data)
+
+        if typed_data["message"]["signatureType"] == int(SignatureTypeV2.POLY_1271):
+            order_hash = "0x" + _hash_message(encoded).hex()
+            return self._build_poly_1271_order_signature(typed_data), order_hash
+
+        signed = Account.sign_message(encoded, private_key=self.signer.private_key)
+        return "0x" + signed.signature.hex(), "0x" + signed.message_hash.hex()
 
     def _build_poly_1271_order_signature(self, typed_data: dict) -> str:
         message = typed_data["message"]
