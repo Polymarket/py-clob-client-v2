@@ -117,6 +117,7 @@ from .http_helpers.helpers import (
     parse_drop_notification_params,
     post,
 )
+from .order_builder.helpers import _resolve_order_routing
 from .order_builder.builder import OrderBuilder, ROUNDING_CONFIG
 from .order_builder.helpers import round_normal
 from .clob_types import RequestArgs
@@ -726,10 +727,12 @@ class ClobClient:
             if not getattr(order_args, "builder_code", None) or order_args.builder_code == BYTES32_ZERO:
                 order_args.builder_code = self.builder_config.builder_code
 
-        token_id = order_args.token_id
+        asset_id, version = _resolve_order_routing(
+            order_args, getattr(options, "version", None)
+        )
 
         tick_size = self.__resolve_tick_size(
-            token_id, options.tick_size if options else None
+            asset_id, options.tick_size if options else None
         )
 
         if not price_valid(order_args.price, tick_size):
@@ -740,16 +743,16 @@ class ClobClient:
 
         price = round_normal(order_args.price, ROUNDING_CONFIG[tick_size].price)
 
-        version = self.__resolve_version()
+        version = version if version is not None else self.__resolve_version()
 
         size = order_args.size
         if (
-            version == 2
+            version != 1
             and (order_args.side == "BUY" or order_args.side == Side.BUY)
             and getattr(order_args, "user_usdc_balance", None) is not None
         ):
             adjusted = self._adjust_buy_amount_for_balance(
-                token_id,
+                asset_id,
                 size * price,
                 price,
                 order_args.user_usdc_balance,
@@ -758,13 +761,17 @@ class ClobClient:
             size = adjusted / price
 
         neg_risk = (
-            options.neg_risk
-            if (options and options.neg_risk is not None)
-            else self.get_neg_risk(token_id)
+            False
+            if version == 3
+            else (
+                options.neg_risk
+                if (options and options.neg_risk is not None)
+                else self.get_neg_risk(asset_id)
+            )
         )
 
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
-        fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
+        fee_rate_bps = self.__resolve_fee_rate_bps(asset_id, user_fee_rate_bps) if version == 1 else None
 
         build_args = dataclass_replace(order_args, price=price, size=size)
         return self.builder.build_order(
@@ -781,17 +788,19 @@ class ClobClient:
     ):
         self.assert_level_1_auth()
 
-        token_id = order_args.token_id
-        self.__ensure_market_info_cached(token_id)
+        asset_id, version = _resolve_order_routing(
+            order_args, getattr(options, "version", None)
+        )
+        self.__ensure_market_info_cached(asset_id)
 
         tick_size = self.__resolve_tick_size(
-            token_id, options.tick_size if options else None
+            asset_id, options.tick_size if options else None
         )
 
         price = order_args.price
         if not price:
             price = self.calculate_market_price(
-                token_id,
+                asset_id,
                 order_args.side,
                 order_args.amount,
                 order_args.order_type,
@@ -812,22 +821,26 @@ class ClobClient:
         amount = order_args.amount
         if (order_args.side == "BUY" or order_args.side == Side.BUY) and getattr(order_args, "user_usdc_balance", None):
             amount = self._adjust_buy_amount_for_balance(
-                token_id,
+                asset_id,
                 amount,
                 price,
                 order_args.user_usdc_balance,
                 builder_code,
             )
 
+        version = version if version is not None else self.__resolve_version()
         neg_risk = (
-            options.neg_risk
-            if (options and options.neg_risk is not None)
-            else self.get_neg_risk(token_id)
+            False
+            if version == 3
+            else (
+                options.neg_risk
+                if (options and options.neg_risk is not None)
+                else self.get_neg_risk(asset_id)
+            )
         )
-        version = self.__resolve_version()
 
         user_fee_rate_bps = getattr(order_args, "fee_rate_bps", None) or None
-        fee_rate_bps = self.__resolve_fee_rate_bps(token_id, user_fee_rate_bps) if version == 1 else None
+        fee_rate_bps = self.__resolve_fee_rate_bps(asset_id, user_fee_rate_bps) if version == 1 else None
 
         build_args = dataclass_replace(order_args, price=price, amount=amount)
         return self.builder.build_market_order(
