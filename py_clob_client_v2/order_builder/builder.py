@@ -7,6 +7,7 @@ from .helpers import (
     round_normal,
     round_up,
     decimal_places,
+    _resolve_order_routing,
 )
 from .constants import BUY, SELL
 from ..config import get_contract_config
@@ -139,7 +140,9 @@ class OrderBuilder:
         Creates and signs a limit order.
         version=2 (default) uses the V2 exchange contract.
         version=1 uses the V1 exchange contract (legacy).
+        position_id always selects Exchange V3, regardless of version.
         """
+        asset_id, version = _resolve_order_routing(order_args, version)
         round_config = ROUNDING_CONFIG[options.tick_size]
         side, maker_amount, taker_amount = self.get_order_amounts(
             order_args.side,
@@ -167,7 +170,7 @@ class OrderBuilder:
             order_data = OrderDataV1(
                 maker=self.funder,
                 taker=getattr(order_args, "taker", ZERO_ADDRESS),
-                tokenId=order_args.token_id,
+                tokenId=asset_id,
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
@@ -182,15 +185,17 @@ class OrderBuilder:
             )
             return builder.build_signed_order(order_data)
 
-        elif version == 2:
+        elif version in (2, 3):
             exchange_address = (
-                contract_config.neg_risk_exchange_v2
+                contract_config.exchange_v3
+                if version == 3
+                else contract_config.neg_risk_exchange_v2
                 if options.neg_risk
                 else contract_config.exchange_v2
             )
             order_data = OrderDataV2(
                 maker=self.funder,
-                tokenId=order_args.token_id,
+                tokenId=asset_id,
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
@@ -202,7 +207,10 @@ class OrderBuilder:
                 expiration=str(getattr(order_args, "expiration", 0)),
             )
             builder = ExchangeOrderBuilderV2(
-                exchange_address, self.signer.get_chain_id(), self.signer
+                exchange_address,
+                self.signer.get_chain_id(),
+                self.signer,
+                domain_version=str(version),
             )
             return builder.build_signed_order(order_data)
 
@@ -220,7 +228,9 @@ class OrderBuilder:
         Creates and signs a market order.
         version=2 (default) uses the V2 exchange contract.
         version=1 uses the V1 exchange contract (legacy).
+        position_id always selects Exchange V3, regardless of version.
         """
+        asset_id, version = _resolve_order_routing(order_args, version)
         round_config = ROUNDING_CONFIG[options.tick_size]
         side, maker_amount, taker_amount = self.get_market_order_amounts(
             order_args.side,
@@ -248,7 +258,7 @@ class OrderBuilder:
             order_data = OrderDataV1(
                 maker=self.funder,
                 taker=getattr(order_args, "taker", ZERO_ADDRESS),
-                tokenId=order_args.token_id,
+                tokenId=asset_id,
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
@@ -263,15 +273,17 @@ class OrderBuilder:
             )
             return builder.build_signed_order(order_data)
 
-        elif version == 2:
+        elif version in (2, 3):
             exchange_address = (
-                contract_config.neg_risk_exchange_v2
+                contract_config.exchange_v3
+                if version == 3
+                else contract_config.neg_risk_exchange_v2
                 if options.neg_risk
                 else contract_config.exchange_v2
             )
             order_data = OrderDataV2(
                 maker=self.funder,
-                tokenId=order_args.token_id,
+                tokenId=asset_id,
                 makerAmount=str(maker_amount),
                 takerAmount=str(taker_amount),
                 side=side,
@@ -282,7 +294,10 @@ class OrderBuilder:
                 builder=order_args.builder_code,
             )
             builder = ExchangeOrderBuilderV2(
-                exchange_address, self.signer.get_chain_id(), self.signer
+                exchange_address,
+                self.signer.get_chain_id(),
+                self.signer,
+                domain_version=str(version),
             )
             return builder.build_signed_order(order_data)
 

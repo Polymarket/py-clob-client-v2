@@ -37,6 +37,23 @@ resp = client.create_and_post_order(
 print(resp)
 ```
 
+For Polymarket V2 outcomes, pass `position_id` instead of `token_id`:
+
+```python
+resp = client.create_and_post_order(
+    OrderArgs(position_id="456", price=0.4, size=100, side=Side.BUY),
+    options=PartialCreateOrderOptions(tick_size="0.01"),
+    order_type=OrderType.GTC,
+)
+```
+
+Provide exactly one identifier. `position_id` automatically selects Exchange V3
+signing, including when using `OrderBuilder` directly, and ignores `neg_risk` and
+any requested exchange version. Existing `token_id` orders retain server-selected
+version routing; `PartialCreateOrderOptions(version=1)` or `version=2` can override
+it. Signed orders and HTTP payloads still use the protocol field `tokenId` for
+both kinds of identifier.
+
 See [examples](examples/) for more information.
 
 ### Market Orders
@@ -58,6 +75,16 @@ resp = client.create_and_post_market_order(
     order_type=OrderType.FOK,
 )
 print(resp)
+```
+
+Position-backed market orders use the same workflow and amount units:
+
+```python
+resp = client.create_and_post_market_order(
+    MarketOrderArgs(position_id="456", amount=100, side=Side.BUY),
+    options=PartialCreateOrderOptions(tick_size="0.01"),
+    order_type=OrderType.FOK,
+)
 ```
 
 ### Authentication

@@ -6,6 +6,15 @@ from typing import Literal
 from .constants import ZERO_ADDRESS, BYTES32_ZERO
 
 
+def _resolve_order_asset(token_id: Optional[str], position_id: Optional[str]) -> str:
+    if (token_id is None) == (position_id is None):
+        raise ValueError("provide exactly one of token_id or position_id")
+    asset_id = position_id if position_id is not None else token_id
+    if not isinstance(asset_id, str) or not asset_id.strip():
+        raise ValueError("token_id or position_id must be a non-empty string")
+    return asset_id
+
+
 class OrderType:
     GTC = "GTC"
     FOK = "FOK"
@@ -71,18 +80,18 @@ class OrderArgsV1:
     """Builder code (bytes32) for builder fee attribution"""
 
 
-@dataclass
+@dataclass(init=False)
 class OrderArgsV2:
     """Input for creating a V2 limit order."""
 
-    token_id: str
+    token_id: Optional[str]
     """TokenID of the Conditional token asset being traded"""
 
     price: float
     """Price used to create the order"""
 
     size: float
-    """Size in terms of the ConditionalToken"""
+    """Size in outcome shares"""
 
     side: str
     """Side of the order"""
@@ -99,6 +108,42 @@ class OrderArgsV2:
     user_usdc_balance: Optional[float] = None
     """User's collateral balance. If provided and insufficient to cover size*price + fees, the order
     size is reduced"""
+
+    position_id: Optional[str] = None
+    """Position ID of a Polymarket V2 outcome; selects Exchange V3 signing.
+    Provide exactly one of token_id or position_id.
+    """
+
+    def __init__(
+        self,
+        token_id: Optional[str] = None,
+        price: Optional[float] = None,
+        size: Optional[float] = None,
+        side: Optional[str] = None,
+        expiration: int = 0,
+        builder_code: str = BYTES32_ZERO,
+        metadata: str = BYTES32_ZERO,
+        user_usdc_balance: Optional[float] = None,
+        *,
+        position_id: Optional[str] = None,
+    ):
+        # Keep the existing positional constructor while allowing position_id alone.
+        if price is None:
+            raise TypeError("price is required")
+        if size is None:
+            raise TypeError("size is required")
+        if side is None:
+            raise TypeError("side is required")
+        _resolve_order_asset(token_id, position_id)
+        self.token_id = token_id
+        self.price = price
+        self.size = size
+        self.side = side
+        self.expiration = expiration
+        self.builder_code = builder_code
+        self.metadata = metadata
+        self.user_usdc_balance = user_usdc_balance
+        self.position_id = position_id
 
 
 # Alias: default to V2
@@ -136,11 +181,11 @@ class MarketOrderArgsV1:
     """Builder code (bytes32) for builder fee attribution"""
 
 
-@dataclass
+@dataclass(init=False)
 class MarketOrderArgsV2:
     """Input for creating a V2 market order."""
 
-    token_id: str
+    token_id: Optional[str]
     """TokenID of the Conditional token asset being traded"""
 
     amount: float
@@ -162,6 +207,40 @@ class MarketOrderArgsV2:
 
     metadata: str = BYTES32_ZERO
     """Optional metadata (bytes32) attached to the order"""
+
+    position_id: Optional[str] = None
+    """Position ID of a Polymarket V2 outcome; selects Exchange V3 signing.
+    Provide exactly one of token_id or position_id.
+    """
+
+    def __init__(
+        self,
+        token_id: Optional[str] = None,
+        amount: Optional[float] = None,
+        side: Optional[str] = None,
+        price: float = 0,
+        order_type: OrderType = OrderType.FOK,
+        user_usdc_balance: float = 0,
+        builder_code: str = BYTES32_ZERO,
+        metadata: str = BYTES32_ZERO,
+        *,
+        position_id: Optional[str] = None,
+    ):
+        # Keep the existing positional constructor while allowing position_id alone.
+        if amount is None:
+            raise TypeError("amount is required")
+        if side is None:
+            raise TypeError("side is required")
+        _resolve_order_asset(token_id, position_id)
+        self.token_id = token_id
+        self.amount = amount
+        self.side = side
+        self.price = price
+        self.order_type = order_type
+        self.user_usdc_balance = user_usdc_balance
+        self.builder_code = builder_code
+        self.metadata = metadata
+        self.position_id = position_id
 
 
 # Alias: default to V2
@@ -266,6 +345,8 @@ class CreateOrderOptions:
 class PartialCreateOrderOptions:
     tick_size: Optional[TickSize] = None
     neg_risk: Optional[bool] = None
+    version: Optional[int] = None
+    """Exchange version for token orders; position_id always selects V3."""
 
 
 @dataclass
@@ -299,6 +380,9 @@ class ContractConfig:
 
     neg_risk_exchange_v2: str
     """The V2 neg risk exchange contract"""
+
+    exchange_v3: str = ""
+    """The Exchange V3 contract for Polymarket V2 outcomes"""
 
 
 @dataclass

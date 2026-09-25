@@ -65,18 +65,20 @@ class ExchangeOrderBuilderV2:
         chain_id: int,
         signer: Signer,
         generate_salt=generate_order_salt,
+        domain_version: str = CTF_EXCHANGE_V2_DOMAIN_VERSION,
     ):
         self.contract_address = contract_address
         self.chain_id = chain_id
         self.signer = signer
         self.generate_salt = generate_salt
+        self.domain_version = domain_version
         self.app_domain_separator = _keccak(
             primitive=abi_encode(
                 ["bytes32", "bytes32", "bytes32", "uint256", "address"],
                 [
                     DOMAIN_TYPE_HASH,
                     CTF_EXCHANGE_NAME_HASH,
-                    CTF_EXCHANGE_VERSION_HASH,
+                    _keccak(text=domain_version),
                     chain_id,
                     contract_address,
                 ],
@@ -131,7 +133,7 @@ class ExchangeOrderBuilderV2:
             },
             "domain": {
                 "name": CTF_EXCHANGE_V2_DOMAIN_NAME,
-                "version": CTF_EXCHANGE_V2_DOMAIN_VERSION,
+                "version": self.domain_version,
                 "chainId": self.chain_id,
                 "verifyingContract": self.contract_address,
             },
