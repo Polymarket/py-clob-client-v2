@@ -1,3 +1,6 @@
+# CLOB host
+CLOB_HOST = "https://clob.polymarket.com"
+
 # Access levels
 L0 = 0
 L1 = 1
