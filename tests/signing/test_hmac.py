@@ -1,5 +1,6 @@
 from unittest import TestCase
 import binascii
+import json
 
 from py_clob_client_v2.signing.hmac import build_hmac_signature
 
@@ -174,3 +175,40 @@ class TestHMAC(TestCase):
             self.secret, self.timestamp, self.method, self.path, '{"x":1,"y":2}'
         )
         self.assertNotEqual(sig_a, sig_b)
+
+    def _sig(self, body):
+        return build_hmac_signature(
+            self.secret, self.timestamp, self.method, self.path, body
+        )
+
+    def test_bool_value_serialized_as_json_not_python_repr(self):
+        # Regression for #108: str({"deferExec": False}) yields "False", not the
+        # JSON "false" the server actually receives. The signature must be taken
+        # over the json.dumps form so it matches the sent payload.
+        body = {"deferExec": False}
+        self.assertEqual(
+            self._sig(body), self._sig(json.dumps(body, ensure_ascii=False))
+        )
+        # The broken str()-based rendering must NOT match the fixed signature.
+        self.assertNotEqual(self._sig(body), self._sig(str(body).replace("'", '"')))
+        # Explicitly: signing the dict matches signing '{"deferExec": false}'.
+        self.assertEqual(self._sig(body), self._sig('{"deferExec": false}'))
+
+    def test_none_value_serialized_as_json_null(self):
+        # Regression for #108: str({"foo": None}) yields "None", not JSON "null".
+        body = {"foo": None}
+        self.assertEqual(
+            self._sig(body), self._sig(json.dumps(body, ensure_ascii=False))
+        )
+        self.assertNotEqual(self._sig(body), self._sig(str(body).replace("'", '"')))
+        self.assertEqual(self._sig(body), self._sig('{"foo": null}'))
+
+    def test_bool_true_and_nested_none_serialized_as_json(self):
+        body = {"a": True, "b": {"c": None}, "d": [False, None]}
+        self.assertEqual(
+            self._sig(body), self._sig(json.dumps(body, ensure_ascii=False))
+        )
+        self.assertEqual(
+            self._sig(body),
+            self._sig('{"a": true, "b": {"c": null}, "d": [false, null]}'),
+        )
