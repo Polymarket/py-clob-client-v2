@@ -80,6 +80,48 @@ class TestGetFeeRateBps(TestCase):
         self.assertEqual(rate, 0)
 
 
+class TestGetFeeRate(TestCase):
+    def test_returns_cached_rate_from_market_info(self):
+        client = _make_client()
+        _inject_market_info(client, TOKEN_ID, rate=0.07, exponent=1.0)
+        self.assertEqual(client.get_fee_rate(TOKEN_ID), 0.07)
+
+    def test_fetches_market_info_when_not_cached(self):
+        client = _make_client()
+        client._ClobClient__token_condition_map[TOKEN_ID] = CONDITION_ID
+
+        clob_market_response = {
+            "t": [{"t": TOKEN_ID}],
+            "mts": "0.01",
+            "nr": False,
+            "fd": {"r": 0.04, "e": 1.0},
+        }
+        with patch.object(client, "_get", return_value=clob_market_response):
+            rate = client.get_fee_rate(TOKEN_ID)
+
+        self.assertEqual(rate, 0.04)
+
+    def test_no_refetch_after_cache_hit(self):
+        client = _make_client()
+        _inject_market_info(client, TOKEN_ID, rate=0.05, exponent=1.0)
+
+        with patch.object(client, "_get") as mock_get:
+            rate = client.get_fee_rate(TOKEN_ID)
+
+        self.assertEqual(rate, 0.05)
+        mock_get.assert_not_called()
+
+    def test_is_not_the_fee_rate_bps_endpoint_value(self):
+        """get_fee_rate exposes the real per-market rate, distinct from the
+        constant base_fee flag returned by get_fee_rate_bps."""
+        client = _make_client()
+        _inject_market_info(client, TOKEN_ID, rate=0.07, exponent=1.0)
+        with patch.object(client, "_get", return_value={"base_fee": 1000}):
+            base_fee = client.get_fee_rate_bps(TOKEN_ID)
+        self.assertEqual(base_fee, 1000)
+        self.assertEqual(client.get_fee_rate(TOKEN_ID), 0.07)
+
+
 class TestGetFeeExponent(TestCase):
     def test_returns_cached_exponent_from_market_info(self):
         client = _make_client()
