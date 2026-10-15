@@ -1,5 +1,5 @@
-> [!NOTE]
-> We've released a new unified SDK that combines all our REST APIs and WebSockets into one package. We recommend [Polymarket/py-sdk](https://github.com/Polymarket/py-sdk) for new projects.
+> [!WARNING]
+> **This package is deprecated.** Please migrate to the unified Polymarket SDK. Follow the [migration guide](https://docs.polymarket.com/migrate/clob-sdk-to-unified-sdk) to get started.
 
 # PY Polymarket CLOB Client V2
 
