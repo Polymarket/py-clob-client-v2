@@ -148,6 +148,9 @@ def _is_trade_resolved(trade: dict) -> bool:
     return status == FAILED_TRADE_STATUS or bool(trade.get("transaction_hash"))
 
 
+_MISSING = object()
+
+
 def _book_params_to_json(params: list) -> list:
     payload = []
     for param in params:
@@ -172,6 +175,7 @@ class ClobClient:
         use_server_time: bool = False,
         retry_on_error: bool = False,
         fee_slippage: float = 0,
+        metadata_ttl: float = 300.0,
     ):
         self.host = host.rstrip("/")
         self.chain_id = chain_id
@@ -198,6 +202,8 @@ class ClobClient:
         self.__fee_infos: dict = {}
         self.__builder_fee_rates: dict = {}
         self.__token_condition_map: dict = {}
+        self.__metadata_ttl = metadata_ttl
+        self.__metadata_stamps: dict = {}
         self.__cached_version: Optional[int] = None
 
         self.rfq = RfqClient(self)
@@ -329,8 +335,8 @@ class ClobClient:
                 continue
             token_id = token["t"]
             self.__token_condition_map[token_id] = condition_id
-            self.__tick_sizes[token_id] = str(result["mts"])
-            self.__neg_risk[token_id] = result.get("nr", False)
+            self.__meta_set(self.__tick_sizes, "tick_sizes", token_id, str(result["mts"]))
+            self.__meta_set(self.__neg_risk, "neg_risk", token_id, result.get("nr", False))
 
             fd = result.get("fd") or {}
             self.__fee_infos[token_id] = FeeInfo(
@@ -355,9 +361,48 @@ class ClobClient:
             orderbook = parse_raw_orderbook_summary(orderbook)
         return generate_orderbook_summary_hash(orderbook)
 
+    def __meta_get(self, bucket: dict, stamp_key: str, token_id: str):
+        if token_id not in bucket:
+            return _MISSING
+        stamped_at = self.__metadata_stamps.get((stamp_key, token_id))
+        if stamped_at is None:
+            # Written outside this client (direct dict injection, or a subclass
+            # that predates the TTL): keep the legacy immortal-cache behaviour.
+            return bucket[token_id]
+        if (time.monotonic() - stamped_at) < self.__metadata_ttl:
+            return bucket[token_id]
+        return _MISSING
+
+    def __meta_set(self, bucket: dict, stamp_key: str, token_id: str, value):
+        bucket[token_id] = value
+        self.__metadata_stamps[(stamp_key, token_id)] = time.monotonic()
+
+    def clear_metadata_cache(self, token_id: Optional[str] = None):
+        """
+        Drops cached per-market metadata (tick size, neg-risk, fee rate),
+        forcing fresh fetches on the next access.
+
+        Args:
+            token_id: If provided, only clears cached entries for this token.
+                      Otherwise clears all cached metadata.
+        """
+        for bucket, stamp_key in (
+            (self.__tick_sizes, "tick_sizes"),
+            (self.__neg_risk, "neg_risk"),
+            (self.__fee_rates, "fee_rates"),
+        ):
+            if token_id is not None:
+                bucket.pop(token_id, None)
+                self.__metadata_stamps.pop((stamp_key, token_id), None)
+            else:
+                bucket.clear()
+        if token_id is None:
+            self.__metadata_stamps.clear()
+
     def get_tick_size(self, token_id: str) -> TickSize:
-        if token_id in self.__tick_sizes:
-            return self.__tick_sizes[token_id]
+        cached = self.__meta_get(self.__tick_sizes, "tick_sizes", token_id)
+        if cached is not _MISSING:
+            return cached
 
         if token_id in self.__token_condition_map:
             self.get_clob_market_info(self.__token_condition_map[token_id])
@@ -366,12 +411,15 @@ class ClobClient:
         result = self._get(
             f"{self.host}{GET_TICK_SIZE}", params={"token_id": token_id}
         )
-        self.__tick_sizes[token_id] = str(result["minimum_tick_size"])
+        self.__meta_set(
+            self.__tick_sizes, "tick_sizes", token_id, str(result["minimum_tick_size"])
+        )
         return self.__tick_sizes[token_id]
 
     def get_neg_risk(self, token_id: str) -> bool:
-        if token_id in self.__neg_risk:
-            return self.__neg_risk[token_id]
+        cached = self.__meta_get(self.__neg_risk, "neg_risk", token_id)
+        if cached is not _MISSING:
+            return cached
 
         if token_id in self.__token_condition_map:
             self.get_clob_market_info(self.__token_condition_map[token_id])
@@ -380,17 +428,20 @@ class ClobClient:
         result = self._get(
             f"{self.host}{GET_NEG_RISK}", params={"token_id": token_id}
         )
-        self.__neg_risk[token_id] = result["neg_risk"]
+        self.__meta_set(self.__neg_risk, "neg_risk", token_id, result["neg_risk"])
         return self.__neg_risk[token_id]
 
     def get_fee_rate_bps(self, token_id: str) -> int:
-        if token_id in self.__fee_rates:
-            return self.__fee_rates[token_id]
+        cached = self.__meta_get(self.__fee_rates, "fee_rates", token_id)
+        if cached is not _MISSING:
+            return cached
 
         result = self._get(
             f"{self.host}{GET_FEE_RATE}", params={"token_id": token_id}
         )
-        self.__fee_rates[token_id] = result.get("base_fee") or 0
+        self.__meta_set(
+            self.__fee_rates, "fee_rates", token_id, result.get("base_fee") or 0
+        )
         return self.__fee_rates[token_id]
 
     def get_fee_exponent(self, token_id: str) -> float:
