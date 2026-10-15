@@ -45,6 +45,7 @@ class SignedOrderV1(OrderV1):
     """A signed V1 order including the EIP712 signature."""
 
     signature: str = ""
+    order_hash: str = ""
 
 
 def order_to_json_v1(

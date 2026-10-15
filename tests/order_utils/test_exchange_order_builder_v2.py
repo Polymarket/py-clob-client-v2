@@ -1,4 +1,5 @@
 from unittest import TestCase
+from unittest.mock import patch
 
 from py_clob_client_v2.config import get_contract_config
 from py_clob_client_v2.constants import AMOY, BYTES32_ZERO
@@ -6,7 +7,10 @@ from py_clob_client_v2.order_utils.exchange_order_builder_v2 import (
     ORDER_TYPE_STRING,
     ExchangeOrderBuilderV2,
 )
-from py_clob_client_v2.order_utils.model.order_data_v2 import OrderDataV2
+from py_clob_client_v2.order_utils.model.order_data_v2 import (
+    OrderDataV2,
+    order_to_json_v2,
+)
 from py_clob_client_v2.order_utils.model.side import Side
 from py_clob_client_v2.order_utils.model.signature_type_v2 import SignatureTypeV2
 from py_clob_client_v2.signer import Signer
@@ -44,6 +48,24 @@ def _poly_1271_order_data() -> OrderDataV2:
         takerAmount="50000000",
         side=Side.BUY,
         signatureType=SignatureTypeV2.POLY_1271,
+        timestamp=FIXED_TIMESTAMP,
+        metadata=BYTES32_ZERO,
+        builder=BYTES32_ZERO,
+    )
+
+
+def _eoa_signed_order_data(signature_type: SignatureTypeV2) -> OrderDataV2:
+    maker = (
+        SIGNER.address() if signature_type == SignatureTypeV2.EOA else DEPOSIT_WALLET
+    )
+    return OrderDataV2(
+        maker=maker,
+        signer=SIGNER.address(),
+        tokenId="1234",
+        makerAmount="100000000",
+        takerAmount="50000000",
+        side=Side.BUY,
+        signatureType=signature_type,
         timestamp=FIXED_TIMESTAMP,
         metadata=BYTES32_ZERO,
         builder=BYTES32_ZERO,
@@ -127,3 +149,64 @@ class TestExchangeOrderBuilderV2CTF(TestCase):
         self.assertEqual(signed.signer, DEPOSIT_WALLET)
         self.assertEqual(signed.signatureType, SignatureTypeV2.POLY_1271)
         self.assertEqual(signed.signature, EXPECTED_POLY_1271_SIGNATURE)
+        self.assertEqual(
+            signed.order_hash,
+            "0x2afca94626db91b2d556c351584a4cd93e13da32e377dc48c7983e43afa5ab47",
+        )
+        self.assertNotIn(
+            "order_hash", order_to_json_v2(signed, "owner", "GTC")["order"]
+        )
+
+    def test_build_signed_order_poly_1271_encodes_typed_data_once(self):
+        from py_clob_client_v2.order_utils import exchange_order_builder_v2 as module
+
+        with (
+            patch.object(
+                module,
+                "encode_typed_data",
+                wraps=module.encode_typed_data,
+            ) as encode,
+            patch.object(
+                module,
+                "_hash_message",
+                wraps=module._hash_message,
+            ) as order_hash,
+        ):
+            signed = self.builder.build_signed_order(_poly_1271_order_data())
+
+        self.assertTrue(signed.order_hash.startswith("0x"))
+        encode.assert_called_once()
+        order_hash.assert_called_once()
+
+    def test_build_signed_eoa_family_orders_carry_hash_from_one_encode(self):
+        from py_clob_client_v2.order_utils import exchange_order_builder_v2 as module
+
+        for signature_type in (
+            SignatureTypeV2.EOA,
+            SignatureTypeV2.POLY_PROXY,
+            SignatureTypeV2.POLY_GNOSIS_SAFE,
+        ):
+            with self.subTest(signature_type=signature_type):
+                with (
+                    patch.object(
+                        module,
+                        "encode_typed_data",
+                        wraps=module.encode_typed_data,
+                    ) as encode,
+                    patch.object(
+                        module,
+                        "_hash_message",
+                        wraps=module._hash_message,
+                    ) as duplicate_hash,
+                ):
+                    signed = self.builder.build_signed_order(
+                        _eoa_signed_order_data(signature_type)
+                    )
+
+                typed_data = self.builder.build_order_typed_data(signed)
+                self.assertEqual(
+                    signed.order_hash,
+                    self.builder.build_order_hash(typed_data),
+                )
+                encode.assert_called_once()
+                duplicate_hash.assert_not_called()

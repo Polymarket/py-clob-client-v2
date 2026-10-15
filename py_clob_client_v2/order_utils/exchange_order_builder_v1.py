@@ -36,8 +36,14 @@ class ExchangeOrderBuilderV1:
     def build_signed_order(self, order_data: OrderDataV1) -> SignedOrderV1:
         order = self.build_order(order_data)
         typed_data = self.build_order_typed_data(order)
-        signature = self.build_order_signature(typed_data)
-        return SignedOrderV1(**{**dataclasses.asdict(order), "signature": signature})
+        signature, order_hash = self._build_order_signature_and_hash(typed_data)
+        return SignedOrderV1(
+            **{
+                **dataclasses.asdict(order),
+                "signature": signature,
+                "order_hash": order_hash,
+            }
+        )
 
     def build_order(self, order_data: OrderDataV1) -> OrderV1:
         signer_addr = order_data.signer if order_data.signer else order_data.maker
@@ -94,9 +100,16 @@ class ExchangeOrderBuilderV1:
         }
 
     def build_order_signature(self, typed_data: dict) -> str:
+        signature, _ = self._build_order_signature_and_hash(typed_data)
+        return signature
+
+    def _build_order_signature_and_hash(self, typed_data: dict) -> tuple[str, str]:
         encoded = encode_typed_data(full_message=typed_data)
         signed = Account.sign_message(encoded, private_key=self.signer.private_key)
-        return "0x" + signed.signature.hex()
+        return (
+            "0x" + signed.signature.hex(),
+            "0x" + signed.message_hash.hex(),
+        )
 
     def build_order_hash(self, typed_data: dict) -> str:
         encoded = encode_typed_data(full_message=typed_data)
