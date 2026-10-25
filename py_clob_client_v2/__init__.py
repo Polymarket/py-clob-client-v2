@@ -1,3 +1,9 @@
+import logging as _logging
+
+# Library default: do not emit log records when the consuming application has
+# not configured logging. See https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library
+_logging.getLogger(__name__).addHandler(_logging.NullHandler())
+
 from .client import ClobClient
 from .fees import adjust_buy_amount_for_fees
 from .order_utils import SignatureTypeV2, Side
