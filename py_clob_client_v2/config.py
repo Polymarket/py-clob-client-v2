@@ -27,7 +27,7 @@ def get_contract_config(chain_id: int) -> ContractConfig:
             conditional_tokens="0x69308FB512518e39F9b16112fA8d994F4e2Bf8bB",
             exchange_v2="0xE111180000d2663C0091e4f400237545B87B996B",
             neg_risk_exchange_v2="0xe2222d279d744050d28e00520010520000310F59",
-            exchange_v3="0x9fE6e61422AdB6F610d8597F9684b16912D50C3D",
+            exchange_v3="0xe3333700cA9d93003F00f0F71f8515005F6c00Aa",
         ),
     }
 
