@@ -18,7 +18,6 @@ def get_contract_config(chain_id: int) -> ContractConfig:
             exchange_v2="0xE111180000d2663C0091e4f400237545B87B996B",
             neg_risk_exchange_v2="0xe2222d279d744050d28e00520010520000310F59",
             exchange_v3="0xe3333700cA9d93003F00f0F71f8515005F6c00Aa",
-            position_manager="0x006F54F7f9A22e0000CC2AB60031000000ae9fEF",
         ),
         80002: ContractConfig(
             exchange="0xdFE02Eb6733538f8Ea35D585af8DE5958AD99E40",
@@ -29,7 +28,6 @@ def get_contract_config(chain_id: int) -> ContractConfig:
             exchange_v2="0xE111180000d2663C0091e4f400237545B87B996B",
             neg_risk_exchange_v2="0xe2222d279d744050d28e00520010520000310F59",
             exchange_v3="0xe3333700cA9d93003F00f0F71f8515005F6c00Aa",
-            position_manager="0x006F54F7f9A22e0000CC2AB60031000000ae9fEF",
         ),
     }
 
