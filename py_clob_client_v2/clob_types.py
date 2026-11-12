@@ -384,6 +384,9 @@ class ContractConfig:
     exchange_v3: str = ""
     """The Exchange V3 contract for Polymarket V2 outcomes"""
 
+    position_manager: str = ""
+    """The PositionManager proxy for Polymarket V2 ERC1155 positions"""
+
 
 @dataclass
 class BuilderConfig:
