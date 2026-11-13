@@ -1,4 +1,6 @@
+import math
 import time
+from decimal import Decimal, ROUND_DOWN
 from typing import Optional, Union
 
 from .helpers import (
@@ -12,6 +14,7 @@ from .helpers import (
 from .constants import BUY, SELL
 from ..config import get_contract_config
 from ..constants import ZERO_ADDRESS, BYTES32_ZERO
+from ..exceptions import PolyException
 from ..signer import Signer
 from ..clob_types import (
     OrderArgsV1,
@@ -42,6 +45,56 @@ ROUNDING_CONFIG: dict = {
     "0.001":  RoundConfig(price=3, size=2, amount=5),
     "0.0001": RoundConfig(price=4, size=2, amount=6),
 }
+
+COLLATERAL_DECIMALS = 6
+# Smallest collateral amount, in base units, that a market BUY may spend. It is
+# 0.99 USDC, not 1 USDC, because an exact-price spend of a 1 USDC amount can land
+# just below 1 USDC.
+MIN_MARKET_BUY_AMOUNT = 990_000
+
+
+def _format_collateral(atoms: int) -> str:
+    return f"{Decimal(atoms).scaleb(-COLLATERAL_DECIMALS).normalize():f}"
+
+
+def get_market_buy_amounts(amount, price, round_config: RoundConfig):
+    """Returns (maker_amount, taker_amount) in base units for a market BUY.
+
+    The exchange reads a BUY's price as maker / taker, so the pair must encode the
+    tick-rounded price exactly, with collateral and shares both in whole
+    ``round_config.amount`` decimals. Both amounts then move in fixed steps, and
+    this returns the largest pair whose collateral is at or below ``amount``.
+    Raises PolyException when that collateral is below MIN_MARKET_BUY_AMOUNT.
+    """
+    exact_price = Decimal(str(price)).quantize(
+        Decimal(1).scaleb(-round_config.price), rounding=ROUND_DOWN
+    )
+    if exact_price <= 0:
+        raise PolyException(f"invalid price ({price}) for a BUY market order")
+    unit = 10 ** (COLLATERAL_DECIMALS - round_config.amount)
+    numerator, denominator = exact_price.as_integer_ratio()
+    # collateral = shares * numerator / denominator must be a whole number of
+    # collateral units, and numerator / denominator is in lowest terms.
+    step_divisor = denominator * unit
+    share_step = math.lcm(unit, step_divisor // math.gcd(step_divisor, numerator))
+    collateral_step = share_step * numerator // denominator
+    budget = int(
+        Decimal(str(amount))
+        .quantize(Decimal(1).scaleb(-round_config.amount), rounding=ROUND_DOWN)
+        .scaleb(COLLATERAL_DECIMALS)
+    )
+    steps = max(budget, 0) // collateral_step
+    collateral = steps * collateral_step
+    if collateral < MIN_MARKET_BUY_AMOUNT:
+        minimum_steps = -(-MIN_MARKET_BUY_AMOUNT // collateral_step)
+        raise PolyException(
+            f"BUY amount {amount} cannot be spent exactly at price {exact_price}. "
+            f"At this price the amount is used in steps of "
+            f"{_format_collateral(collateral_step)}; use at least "
+            f"{_format_collateral(minimum_steps * collateral_step)}."
+        )
+    return collateral, steps * share_step
+
 
 class OrderBuilder:
     def __init__(
@@ -103,20 +156,16 @@ class OrderBuilder:
         """Returns (Side, maker_amount, taker_amount) for a market order."""
         if isinstance(side, Side):
             side = BUY if side == Side.BUY else SELL
-        # V2 change: market orders use round_down for price (v1 used round_normal)
-        raw_price = round_down(price, round_config.price)
-
         if side == BUY:
-            raw_maker_amt = round_down(amount, round_config.size)
-            raw_taker_amt = raw_maker_amt / raw_price
-            if decimal_places(raw_taker_amt) > round_config.amount:
-                raw_taker_amt = round_up(raw_taker_amt, round_config.amount + 4)
-                if decimal_places(raw_taker_amt) > round_config.amount:
-                    raw_taker_amt = round_down(raw_taker_amt, round_config.amount)
-
-            return Side.BUY, to_token_decimals(raw_maker_amt), to_token_decimals(raw_taker_amt)
+            # The signed maker / taker must equal the tick-rounded price exactly.
+            maker_amount, taker_amount = get_market_buy_amounts(
+                amount, price, round_config
+            )
+            return Side.BUY, maker_amount, taker_amount
 
         elif side == SELL:
+            # V2 change: market orders use round_down for price (v1 used round_normal)
+            raw_price = round_down(price, round_config.price)
             raw_maker_amt = round_down(amount, round_config.size)
             raw_taker_amt = raw_maker_amt * raw_price
             if decimal_places(raw_taker_amt) > round_config.amount:

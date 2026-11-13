@@ -120,13 +120,13 @@ class TestClientOrderFeeAdjustment(unittest.TestCase):
         # feeBaseAmount = min(50, 50) = 50
         # paddedFee = (50 / 0.5) * 0.015625 * 1.2 = 1.875
         # adjustedAmount = 50 - 1.875 = 48.125
-        # roundDown(48.125, 2) = 48.12
-        # rawPrice = roundDown(0.5, 2) = 0.5
-        # takerAmount = 48.12 / 0.5 = 96.24
-        # makerAmount = 48.12 * 1e6 = 48120000
-        # takerAmount = 96.24 * 1e6 = 96240000
-        self.assertEqual(signed.makerAmount, "48120000")
-        self.assertEqual(signed.takerAmount, "96240000")
+        # price = 0.5 = 1/2; tick 0.01 allows 4 amount decimals (unit 0.0001)
+        # shares step = 0.0002, collateral step = 0.0001
+        # budget = roundDown(48.125, 4) = 48.125 = 481250 steps
+        # makerAmount = 48.125 * 1e6 = 48125000
+        # takerAmount = 96.25 * 1e6 = 96250000 (maker / taker = 0.5 exactly)
+        self.assertEqual(signed.makerAmount, "48125000")
+        self.assertEqual(signed.takerAmount, "96250000")
         self.assertEqual(order.amount, 50)
 
     def test_v2_buy_limit_unchanged_without_user_usdc_balance(self):

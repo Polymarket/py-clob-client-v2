@@ -127,7 +127,11 @@ class TestPositionOrders(unittest.TestCase):
         version.assert_not_called()
         neg_risk.assert_not_called()
         self.assert_v3_signature(signed)
-        self.assertEqual(signed.makerAmount, "48430000")
+        # fee = (50 / 0.5) * 0.25 * (0.5 * 0.5)^2 = 1.5625; amount = 48.4375.
+        # At 0.5 on a 0.01 tick the collateral step is 0.0001, so all of it is spent
+        # for 96.875 shares (maker / taker = 0.5 exactly).
+        self.assertEqual(signed.makerAmount, "48437500")
+        self.assertEqual(signed.takerAmount, "96875000")
         self.assertEqual(order.amount, 50)
         self.assertEqual(order.price, 0)
 
