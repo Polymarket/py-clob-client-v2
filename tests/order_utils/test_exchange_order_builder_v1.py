@@ -1,9 +1,15 @@
 from unittest import TestCase
+from unittest.mock import patch
 
 from py_clob_client_v2.constants import AMOY, ZERO_ADDRESS
 from py_clob_client_v2.config import get_contract_config
-from py_clob_client_v2.order_utils.exchange_order_builder_v1 import ExchangeOrderBuilderV1
-from py_clob_client_v2.order_utils.model.order_data_v1 import OrderDataV1
+from py_clob_client_v2.order_utils.exchange_order_builder_v1 import (
+    ExchangeOrderBuilderV1,
+)
+from py_clob_client_v2.order_utils.model.order_data_v1 import (
+    OrderDataV1,
+    order_to_json_v1,
+)
 from py_clob_client_v2.order_utils.model.ctf_exchange_v1_typed_data import (
     CTF_EXCHANGE_V1_DOMAIN_NAME,
     CTF_EXCHANGE_V1_DOMAIN_VERSION,
@@ -35,6 +41,7 @@ _ORDER_DATA = OrderDataV1(
     expiration="0",
     signatureType=SignatureTypeV1.EOA,
 )
+
 
 class TestExchangeOrderBuilderV1CTF(TestCase):
     """Tests against the CTF Exchange (Polymarket CTF Exchange v1)."""
@@ -206,6 +213,35 @@ class TestExchangeOrderBuilderV1CTF(TestCase):
             signed.signature,
             "0x302cd9abd0b5fcaa202a344437ec0b6660da984e24ae9ad915a592a90facf5a51bb8a873cd8d270f070217fea1986531d5eec66f1162a81f66e026db653bf7ce1c",
         )
+        self.assertEqual(
+            signed.order_hash,
+            "0x02ca1d1aa31103804173ad1acd70066cb6c1258a4be6dada055111f9a7ea4e55",
+        )
+        self.assertNotIn(
+            "order_hash", order_to_json_v1(signed, "owner", "GTC")["order"]
+        )
+
+    def test_build_signed_order_encodes_typed_data_once(self):
+        from py_clob_client_v2.order_utils import exchange_order_builder_v1 as module
+
+        with (
+            patch.object(
+                module,
+                "encode_typed_data",
+                wraps=module.encode_typed_data,
+            ) as encode,
+            patch.object(
+                module,
+                "_hash_message",
+                wraps=module._hash_message,
+            ) as duplicate_hash,
+        ):
+            signed = self.builder.build_signed_order(_ORDER_DATA)
+
+        self.assertTrue(signed.order_hash.startswith("0x"))
+        encode.assert_called_once()
+        duplicate_hash.assert_not_called()
+
 
 class TestExchangeOrderBuilderV1NegRisk(TestCase):
     """Tests against the Neg Risk CTF Exchange."""
